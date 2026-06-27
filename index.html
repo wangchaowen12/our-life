@@ -3,1170 +3,1063 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <title>共同生活設計 · 蘋果派 & 松果</title>
+  <title>蘋果派 × 松果｜共同生活平台</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" />
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;600&family=Noto+Sans+TC:wght@300;400;500&display=swap" />
   <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7.23.10/babel.min.js"></script>
   <style>
-    body { font-family: 'Noto Sans TC', sans-serif; background: #fafaf9; }
-    .font-display { font-family: 'Noto Serif TC', serif; }
-    .no-scrollbar::-webkit-scrollbar { display: none; }
-    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body,#root{height:100%;overflow:hidden}
+    body{font-family:'Noto Sans TC','PingFang TC',system-ui,sans-serif;background:#F8F6F1;color:#2D2820}
+    /* ── DEM styles ── */
+    .node-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);transition:opacity .26s ease,transform .26s ease}
+    .node-orbit{position:absolute;transform:translate(-50%,-50%);transition:opacity .26s ease}
+    .phase-exit .node-center,.phase-exit .node-orbit{opacity:0}
+    .phase-exit .node-center{transform:translate(-50%,-50%) scale(.95)}
+    .phase-enter .node-center{animation:cIn .38s cubic-bezier(.22,1,.36,1) both}
+    .phase-enter .node-orbit{animation:oIn .42s cubic-bezier(.22,1,.36,1) both}
+    @keyframes cIn{from{opacity:0;transform:translate(-50%,-50%) scale(.92)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+    @keyframes oIn{from{opacity:0;transform:translate(-50%,-50%) scale(.88)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+    .phase-exit .svg-lines{opacity:0;transition:opacity .2s}
+    .phase-enter .svg-lines{animation:cIn .5s ease both}
+    .svg-lines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+    @keyframes dialogIn{from{opacity:0;transform:scale(.95) translateY(6px)}to{opacity:1;transform:scale(1) translateY(0)}}
+    /* ── Layout ── */
+    .platform{display:flex;height:100vh;overflow:hidden}
+    .sidebar{width:64px;flex-shrink:0;background:#2D4A3E;display:flex;flex-direction:column;align-items:center;padding:16px 0 20px;gap:2px;z-index:50}
+    .sidebar-brand{width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;margin-bottom:8px;font-size:16px;cursor:default}
+    .nav-btn{width:44px;height:44px;border-radius:12px;border:none;background:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;transition:background .15s}
+    .nav-btn:hover{background:rgba(255,255,255,0.1)}
+    .nav-btn.active{background:rgba(255,255,255,0.18)}
+    .nav-icon{font-size:17px;line-height:1}
+    .nav-label{font-size:8px;color:rgba(248,246,241,0.65);letter-spacing:.04em;font-family:'Noto Sans TC',sans-serif}
+    .nav-btn.active .nav-label{color:#F8F6F1}
+    .sync-btn{width:36px;height:36px;border-radius:10px;border:none;background:rgba(255,255,255,0.08);cursor:pointer;display:flex;align-items:center;justify-content:center;color:rgba(248,246,241,0.5);transition:all .15s;margin-top:auto}
+    .sync-btn:hover{background:rgba(255,255,255,0.15);color:#F8F6F1}
+    .sync-btn.spinning{animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .bottom-nav{display:none;position:fixed;bottom:0;left:0;right:0;height:58px;background:#2D4A3E;flex-direction:row;align-items:center;justify-content:space-around;z-index:50}
+    .page-content{flex:1;overflow:hidden;display:flex;flex-direction:column;min-width:0}
+    @media(max-width:640px){
+      .sidebar{display:none}
+      .bottom-nav{display:flex}
+      .platform{flex-direction:column}
+      .page-content{padding-bottom:58px}
+    }
+    .page-scroll{flex:1;overflow-y:auto;overflow-x:hidden}
+    .page-scroll::-webkit-scrollbar{width:4px}
+    .page-scroll::-webkit-scrollbar-thumb{background:#D8D0C4;border-radius:4px}
+    .card{background:rgba(255,255,255,.75);border:1px solid rgba(180,172,160,.4);border-radius:16px}
+    input,textarea,select{font-family:'Noto Sans TC',sans-serif;font-size:13px;color:#2D2820;background:#FFF;border:1.5px solid #E0D9CF;border-radius:10px;padding:9px 12px;outline:none;transition:border-color .15s;width:100%}
+    input:focus,textarea:focus,select:focus{border-color:#2D4A3E}
+    textarea{resize:none;line-height:1.6}
+    button{font-family:'Noto Sans TC',sans-serif;cursor:pointer}
+    .btn-primary{background:#2D4A3E;color:#F8F6F1;border:none;border-radius:10px;padding:9px 20px;font-size:13px;transition:background .15s}
+    .btn-primary:hover{background:#3A5F4E}
+    .btn-ghost{background:none;border:1.5px solid #E0D9CF;border-radius:10px;padding:9px 16px;font-size:13px;color:#7D7468;transition:all .15s}
+    .btn-ghost:hover{border-color:#2D4A3E;color:#2D4A3E}
   </style>
 </head>
 <body>
-  <div id="root"></div>
-
+<div id="root"></div>
 <script type="text/babel" data-presets="react">
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
 
-/* ================================================================
-   ★ 設定區：貼上你的 Apps Script 網址
-   ================================================================ */
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwWF7d8VAbj1XhijdKRc8d8eLPwMhdikWxqw5Il4ocRJ_D27IFH5VPmTfjYODdvUXoj/exec';
-
-/* ================================================================
-   圖示系統（Lucide SVG paths，行內渲染）
-   ================================================================ */
-const ICON_PATHS = {
-  Home:          `<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>`,
-  Calendar:      `<rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/>`,
-  Sparkles:      `<path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/>`,
-  LayoutGrid:    `<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>`,
-  Plus:          `<line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/>`,
-  X:             `<line x1="18" x2="6" y1="6" y2="18"/><line x1="6" x2="18" y1="6" y2="18"/>`,
-  ChevronLeft:   `<polyline points="15 18 9 12 15 6"/>`,
-  ChevronRight:  `<polyline points="9 18 15 12 9 6"/>`,
-  Heart:         `<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>`,
-  MessageCircle: `<path d="m3 21 1.9-5.7a8.5 8.5 0 1 1 3.8 3.8z"/>`,
-  Users:         `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>`,
-  Clock:         `<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>`,
-  MapPin:        `<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>`,
-  Tag:           `<path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/>`,
-  CheckCircle2:  `<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>`,
-  Circle:        `<circle cx="12" cy="12" r="10"/>`,
-  FolderOpen:    `<path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2"/>`,
-  Star:          `<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>`,
-  BookOpen:      `<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>`,
-  GripVertical:  `<circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/>`,
-  ArrowRight:    `<line x1="5" x2="19" y1="12" y2="12"/><polyline points="12 5 19 12 12 19"/>`,
-  Camera:        `<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>`,
-  Apple:         `<path d="M12 20.94c1.5 0 2.75 1.06 4 1.06 3 0 6-8 6-12.22A4.91 4.91 0 0 0 17 5c-2.22 0-4 1.44-5 2-1-.56-2.78-2-5-2a4.9 4.9 0 0 0-5 4.78C2 13.86 5 22 8 22c1.25 0 2.5-1.06 4-1.06z"/><path d="M10 2c1 .5 2 2 2 5"/>`,
-  TreePine:      `<path d="m17 14 3 3.3a1 1 0 0 1-.7 1.7H4.7a1 1 0 0 1-.7-1.7L7 14"/><path d="m14 10 3 3.3a1 1 0 0 1-.7 1.7H7.7a1 1 0 0 1-.7-1.7L10 10"/><path d="M12 2l4 4.3a1 1 0 0 1-.7 1.7h-6.6a1 1 0 0 1-.7-1.7z"/><path d="M12 22v-3"/>`,
-  Handshake:     `<path d="m11 17 2 2a1 1 0 1 0 3-3"/><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4"/><path d="m21 3 1 11h-1"/><path d="M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3"/><path d="M3 4h8"/>`,
-  Plane:         `<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>`,
-  Moon:          `<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>`,
-  GraduationCap: `<path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/>`,
-  Compass:       `<circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>`,
-  Briefcase:     `<rect width="20" height="14" x="2" y="7" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>`,
-  Trash2:        `<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>`,
-  Pencil:        `<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>`,
-  RefreshCw:     `<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>`,
-  Settings:      `<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>`,
-};
-
-function Icon({ name, size = 24, className = '', strokeWidth = 2 }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width={size} height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={strokeWidth}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      dangerouslySetInnerHTML={{ __html: ICON_PATHS[name] || '' }}
-    />
-  );
-}
-
-/* ================================================================
-   Google Sheets / Drive API
-   ================================================================ */
-
+/* ════════════════════════════════════════════════════════
+   ★ 設定區：貼上你的 Google Apps Script 網址
+════════════════════════════════════════════════════════ */
+const APPS_SCRIPT_URL = 'YOUR_APPS_SCRIPT_URL_HERE';
 const IS_CONFIGURED = APPS_SCRIPT_URL !== 'YOUR_APPS_SCRIPT_URL_HERE';
 
+/* ════════════════════════════════════════════════════════
+   Google Sheets / Drive API
+════════════════════════════════════════════════════════ */
 async function apiGet(params) {
   const url = new URL(APPS_SCRIPT_URL);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   const res = await fetch(url.toString(), { redirect: 'follow' });
-  const text = await res.text();
-  return JSON.parse(text);
+  return JSON.parse(await res.text());
 }
-
 async function apiPost(body) {
-  const res = await fetch(APPS_SCRIPT_URL, {
-    method: 'POST',
-    body: JSON.stringify(body),
-    redirect: 'follow',
-  });
-  const text = await res.text();
-  return JSON.parse(text);
+  const res = await fetch(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(body), redirect: 'follow' });
+  return JSON.parse(await res.text());
 }
-
-async function loadAllData() {
-  const result = await apiGet({ action: 'getData' });
-  if (result.ok) return result.data;
-  throw new Error(result.error || '讀取失敗');
+async function sheetsLoadAll() {
+  const r = await apiGet({ action: 'getData' });
+  if (r.ok) return r.data;
+  throw new Error(r.error || '讀取失敗');
 }
-
-async function saveToSheets(key, value) {
+async function sheetsSave(key, value) {
   await apiPost({ action: 'saveData', key, value });
 }
-
-async function uploadImageToDrive(dataUrl) {
+async function driveUploadImage(dataUrl) {
   const [header, base64] = dataUrl.split(',');
   const mimeType = header.match(/:(.*?);/)[1];
-  const filename  = 'dream-' + Date.now() + '.' + mimeType.split('/')[1];
-  const result = await apiPost({ action: 'uploadImage', filename, base64, mimeType });
-  if (result.ok) return result.url;
-  throw new Error(result.error || '圖片上傳失敗');
+  const filename  = 'node-' + Date.now() + '.' + mimeType.split('/')[1];
+  const r = await apiPost({ action: 'uploadImage', filename, base64, mimeType });
+  if (r.ok) return r.url;
+  throw new Error(r.error || '圖片上傳失敗');
 }
 
-/* ================================================================
-   常數與靜態設定
-   ================================================================ */
+/* ════════════════════════════════════════════════════════
+   CONSTANTS
+════════════════════════════════════════════════════════ */
+const APPLE = { key:'apple', name:'蘋果派', color:'#E8956D' };
+const PINE  = { key:'pine',  name:'松果',   color:'#5A8F7B' };
+const US    = { key:'us',    name:'我們',   color:'#8B7BAF' };
+const PEOPLE = { apple:APPLE, pine:PINE, us:US };
 
-const OWNERS = {
-  apple: { key: 'apple', name: '蘋果派', iconName: 'Apple',    color: 'text-orange-500' },
-  pine:  { key: 'pine',  name: '松果',   iconName: 'TreePine', color: 'text-emerald-600' },
-  us:    { key: 'us',    name: '我們',   iconName: 'Handshake', color: 'text-violet-500' },
+const STATUS_LABEL = { todo:'待開始', doing:'進行中', done:'已完成' };
+const STATUS_COLOR = {
+  todo:  { bg:'rgba(160,150,136,.1)', text:'#7D7468', border:'rgba(160,150,136,.3)' },
+  doing: { bg:'rgba(232,149,109,.1)', text:'#C07040', border:'rgba(232,149,109,.3)' },
+  done:  { bg:'rgba(45,74,62,.1)',    text:'#2D4A3E', border:'rgba(45,74,62,.3)'    },
 };
 
-const STRESS_STYLES = {
-  high:   { label: '高壓力', dot: 'bg-rose-500',  text: 'text-rose-600'  },
-  normal: { label: '一般',   dot: 'bg-green-500', text: 'text-green-600' },
-};
+const PAGES = [
+  { key:'home',      label:'首頁',  icon:'🏠' },
+  { key:'dream',     label:'夢想',  icon:'✦'  },
+  { key:'calendar',  label:'月曆',  icon:'📅' },
+  { key:'projects',  label:'專案',  icon:'◎'  },
+  { key:'memories',  label:'回憶',  icon:'📸' },
+  { key:'review',    label:'回顧',  icon:'📖' },
+];
+const MONTHS = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+const DAYS   = ['日','一','二','三','四','五','六'];
 
-const DREAM_STATUSES = ['萌芽中', '探索中', '發展中', '穩定進行', '已實現', '暫停'];
-const DREAM_STATUS_STYLES = {
-  '萌芽中':  'bg-stone-100 text-stone-500 border border-stone-200',
-  '探索中':  'bg-amber-50 text-amber-600 border border-amber-100',
-  '發展中':  'bg-amber-100 text-amber-700 border border-amber-200',
-  '穩定進行':'bg-amber-200 text-amber-800 border border-amber-300',
-  '已實現':  'bg-emerald-500 text-white border border-emerald-500',
-  '暫停':    'bg-stone-100 text-stone-400 border border-stone-200',
-};
+/* ════════════════════════════════════════════════════════
+   LOCAL STORAGE
+════════════════════════════════════════════════════════ */
+const LS_KEY = 'apple-pine-v2';
+function lsLoad() { try { const s=localStorage.getItem(LS_KEY); return s?JSON.parse(s):null; } catch(e){ return null; } }
+function lsSave(s) { try { localStorage.setItem(LS_KEY, JSON.stringify(s)); } catch(e){} }
 
-const TASK_STATUSES = ['待開始', '進行中', '已完成'];
-const TASK_STATUS_STYLES = {
-  '待開始': { pill: 'bg-stone-100 text-stone-500 border border-stone-200', col: 'border-stone-300' },
-  '進行中': { pill: 'bg-amber-100 text-amber-700 border border-amber-200', col: 'border-amber-300' },
-  '已完成': { pill: 'bg-emerald-100 text-emerald-700 border border-emerald-200', col: 'border-emerald-300' },
-};
+/* ════════════════════════════════════════════════════════
+   DATA MODEL
+════════════════════════════════════════════════════════ */
+function uid() { return Math.random().toString(36).slice(2, 9); }
 
-const TAG_ICON_MAP = {
-  '出差':   { iconName: 'Plane',         color: 'text-sky-600'     },
-  '旅行':   { iconName: 'Compass',       color: 'text-teal-600'    },
-  '不回家': { iconName: 'Moon',          color: 'text-indigo-500'  },
-  '約會':   { iconName: 'Heart',         color: 'text-rose-500'    },
-  '課程':   { iconName: 'BookOpen',      color: 'text-amber-600'   },
-  '培訓':   { iconName: 'GraduationCap', color: 'text-purple-500'  },
-  '森林活動':{ iconName: 'TreePine',     color: 'text-emerald-600' },
-  '家庭活動':{ iconName: 'Users',        color: 'text-stone-600'   },
-  '聚會':   { iconName: 'Users',         color: 'text-stone-600'   },
-  '加班':   { iconName: 'Briefcase',     color: 'text-stone-600'   },
-};
-function getTagIcon(tag) { return TAG_ICON_MAP[tag] || { iconName: 'Tag', color: 'text-stone-400' }; }
-
-const MONTH_NAMES = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
-const WEEKDAY_NAMES = ['日','一','二','三','四','五','六'];
-
-/* ================================================================
-   工具函式
-   ================================================================ */
-
-function nextTaskStatus(s) { const i = TASK_STATUSES.indexOf(s); return TASK_STATUSES[(i+1)%3]; }
-
-function getBreadcrumb(task, projects, dreams) {
-  const project = projects.find(p => p.id === task.projectId) || null;
-  const dream   = project ? dreams.find(d => d.id === project.dreamId) || null : null;
-  return { project, dream };
+function makeNode(title, desc='') {
+  return { id:uid(), title, desc, image:null, updates:[] };
+}
+function makeAction(title) {
+  return { id:uid(), title, desc:'', image:null, updates:[], status:'todo', assignee:'us', dueDate:null, completedAt:null };
 }
 
-function getDreamProgress(dreamId, projects, tasks, dreams) {
-  const pids = projects.filter(p => p.dreamId === dreamId).map(p => p.id);
-  const ts   = tasks.filter(t => pids.includes(t.projectId));
-  if (!ts.length) {
-    const map = { '萌芽中':10,'探索中':25,'發展中':50,'穩定進行':75,'已實現':100,'暫停':30 };
-    const d = dreams.find(d => d.id === dreamId);
-    return map[d && d.status] || 0;
-  }
-  return Math.round(ts.filter(t => t.status === '已完成').length / ts.length * 100);
+function buildDefault() {
+  const domains = [
+    'IRC 內在真實練習圈','森林療癒','身心健康','關係經營',
+    '學習成長','財務工作','旅行探索','家與生活空間',
+  ].map(t => makeNode(t));
+  const [irc,forest,health,relation,learning,finance,travel,home] = domains;
+  const projects = {
+    [irc.id]:      ['品牌建立','IRC 網站','年度盛會','SOF研究','引導員培育','課程設計','身體覺察','社群經營'].map(t=>makeNode(t)),
+    [forest.id]:   ['森林工作坊','自然教育','森林探勘','森林旅行','合作夥伴','裝備','品牌建立','森林課程'].map(t=>makeNode(t)),
+    [health.id]:   ['空中瑜伽','Feldenkrais','運動','睡眠','飲食','身體保養','情緒照顧','休息'].map(t=>makeNode(t)),
+    [relation.id]: ['深度對話','約會','共同決策','衝突修復','傾聽','陪伴','家庭','朋友'].map(t=>makeNode(t)),
+    [learning.id]: ['閱讀','課程','研究','寫作','海外學習','反思','創作','AI工具'].map(t=>makeNode(t)),
+    [finance.id]:  ['收入','投資','儲蓄','工作安排','事業規劃','共同預算','保險','退休規劃'].map(t=>makeNode(t)),
+    [travel.id]:   ['京都','大阪','森林旅行','淡蘭古道','海外旅行','文化探索','攝影','自由旅行'].map(t=>makeNode(t)),
+    [home.id]:     ['整理收納','工作室','生活儀式','居住品質','家具','植物','居家修繕','共同空間'].map(t=>makeNode(t)),
+  };
+  const eventProj = projects[irc.id].find(p=>p.title==='年度盛會');
+  const actions = {
+    [eventProj.id]: ['找場地','招募協作者','宣傳','活動流程','講者邀請','教材準備','預算','志工招募'].map(t=>makeAction(t)),
+  };
+  return { dream:makeNode('共創理想生活'), domains, projects, actions };
 }
 
-function getMonthGrid(year, month) {
-  const first = new Date(year, month, 1).getDay();
-  const days  = new Date(year, month + 1, 0).getDate();
-  const cells = [];
-  for (let i = 0; i < first; i++) cells.push(null);
-  for (let d = 1; d <= days; d++) cells.push(d);
-  while (cells.length % 7 !== 0) cells.push(null);
+function buildDefaultState() {
+  return { demData:buildDefault(), calEvents:[], todayStatus:{ apple:{stress:'normal',note:''}, pine:{stress:'normal',note:''} }, support:{} };
+}
+
+/* ════════════════════════════════════════════════════════
+   HELPERS
+════════════════════════════════════════════════════════ */
+function todayKey() {
+  const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function todayLabel() {
+  const d=new Date(), wd=['日','一','二','三','四','五','六'];
+  return `${d.getFullYear()} 年 ${d.getMonth()+1} 月 ${d.getDate()} 日 · 星期${wd[d.getDay()]}`;
+}
+function toKey(y,m,d) { return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
+function monthGrid(y,m) {
+  const first=new Date(y,m,1).getDay(), days=new Date(y,m+1,0).getDate(), cells=[];
+  for(let i=0;i<first;i++) cells.push(null);
+  for(let d=1;d<=days;d++) cells.push(d);
+  while(cells.length%7!==0) cells.push(null);
   return cells;
 }
-
-function toDateKey(year, month, day) {
-  return `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+function orbitPositions(n,rx=38,ry=34) {
+  return Array.from({length:n},(_,i)=>{const a=(i/n)*2*Math.PI-Math.PI/2;return{x:50+rx*Math.cos(a),y:50+ry*Math.sin(a)};});
 }
 
-function getTodayKey() {
-  const d = new Date();
-  return toDateKey(d.getFullYear(), d.getMonth(), d.getDate());
-}
-
-function getTodayLabel() {
-  const d = new Date();
-  const days = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
-  return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日・${days[d.getDay()]}`;
-}
-
-/* ================================================================
-   小元件
-   ================================================================ */
-
-function IdentityIcon({ owner, size = 14 }) {
-  const o = OWNERS[owner];
-  if (!o) return null;
-  return <Icon name={o.iconName} size={size} className={o.color} strokeWidth={2.2} />;
-}
-
-function IdentityBadge({ owner, size = 'sm' }) {
-  const o = OWNERS[owner]; if (!o) return null;
-  const cls = size === 'sm' ? 'text-xs px-2 py-0.5 gap-1' : 'text-sm px-2.5 py-1 gap-1.5';
-  const sz  = size === 'sm' ? 11 : 13;
-  return (
-    <span className={`inline-flex items-center rounded-full font-medium bg-stone-100 text-stone-700 ${cls}`}>
-      <Icon name={o.iconName} size={sz} className={o.color} strokeWidth={2.2} />
-      {o.name}
-    </span>
-  );
-}
-
-function StressIndicator({ level }) {
-  const s = STRESS_STYLES[level] || STRESS_STYLES.normal;
-  return (
-    <span className={`inline-flex items-center gap-1 text-xs font-medium ${s.text}`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`}></span>{s.label}
-    </span>
-  );
-}
-
-function StressMarker({ level, size = 6 }) {
-  const s = STRESS_STYLES[level] || STRESS_STYLES.normal;
-  return <span className={`rounded-full ${s.dot} inline-block flex-shrink-0`} style={{ width: size, height: size }}></span>;
-}
-
-function EventIconRow({ event, size = 14 }) {
-  return (
-    <span className="inline-flex items-center gap-1 flex-wrap">
-      <IdentityIcon owner={event.owner} size={size} />
-      <StressMarker level={event.stress} size={Math.max(5, size - 8)} />
-      {event.tags.map(tag => {
-        const t = getTagIcon(tag);
-        return <Icon key={tag} name={t.iconName} size={size - 2} className={t.color} />;
-      })}
-    </span>
-  );
-}
-
-function DreamStatusPill({ status }) {
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full text-xs font-medium px-2.5 py-1 ${DREAM_STATUS_STYLES[status]}`}>
-      {status === '已實現' && <Icon name="Star" size={11} className="fill-current" />}
-      {status}
-    </span>
-  );
-}
-
-function TaskStatusPill({ status, onClick }) {
-  return (
-    <button onClick={onClick}
-      className={`inline-flex items-center gap-1 rounded-full text-xs font-medium px-2.5 py-1 ${TASK_STATUS_STYLES[status].pill} ${onClick ? 'active:scale-95' : ''}`}>
-      <Icon name={status === '已完成' ? 'CheckCircle2' : 'Circle'} size={11} />
-      {status}
-    </button>
-  );
-}
-
-function ProgressBar({ value, colorClass = 'bg-amber-400' }) {
-  return (
-    <div className="w-full h-1.5 rounded-full bg-stone-100 overflow-hidden">
-      <div className={`h-full rounded-full ${colorClass}`} style={{ width: `${value}%` }}></div>
-    </div>
-  );
-}
-
-function DreamTrail({ dream, project, task }) {
-  return (
-    <div className="flex items-center flex-wrap gap-1.5 text-xs text-stone-500">
-      {dream && <span className="inline-flex items-center gap-1"><Icon name="BookOpen" size={12} className="text-amber-600" /><span className="truncate max-w-28">{dream.title}</span></span>}
-      {dream && project && <span className="text-stone-300">┄┄▸</span>}
-      {project && <span className="inline-flex items-center gap-1"><Icon name="FolderOpen" size={12} className="text-stone-400" /><span className="truncate max-w-28">{project.title}</span></span>}
-      {project && task && <span className="text-stone-300">┄┄▸</span>}
-      {task && <span className="inline-flex items-center gap-1 text-stone-700 font-medium"><span className="truncate max-w-28">{task.title}</span></span>}
-    </div>
-  );
-}
-
-function ModalShell({ onClose, children }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" style={{ backgroundColor: 'rgba(41,37,36,0.5)' }} onClick={onClose}>
-      <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md overflow-y-auto" style={{ maxHeight: '88vh' }} onClick={e => e.stopPropagation()}>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function SectionTitle({ icon, title, subtitle, action }) {
-  return (
-    <div className="flex items-center justify-between mb-3">
-      <div>
-        <h2 className="font-display text-lg font-bold text-stone-800 flex items-center gap-1.5">{icon}{title}</h2>
-        {subtitle && <p className="text-xs text-stone-400 mt-0.5">{subtitle}</p>}
-      </div>
-      {action}
-    </div>
-  );
-}
-
-function IdentitySelect({ value, onChange }) {
-  return (
-    <select value={value} onChange={e => onChange(e.target.value)} className="text-sm border border-stone-200 rounded-lg px-2 py-1.5 bg-white text-stone-700">
-      <option value="apple">🍎 蘋果派</option>
-      <option value="pine">🌲 松果</option>
-      <option value="us">🤝 我們</option>
-    </select>
-  );
-}
-
-function DeleteConfirmButton({ onConfirm, label = '刪除', className = '' }) {
-  const [confirming, setConfirming] = useState(false);
-  if (confirming) return (
-    <span className="inline-flex items-center gap-1">
-      <button onClick={onConfirm} className="text-xs font-medium text-white bg-rose-500 rounded-lg px-2.5 py-1.5">確定？</button>
-      <button onClick={() => setConfirming(false)} className="text-xs text-stone-400 px-1">取消</button>
-    </span>
-  );
-  return (
-    <button onClick={() => setConfirming(true)} className={`inline-flex items-center gap-1 ${className}`}>
-      <Icon name="Trash2" size={13} />{label && <span>{label}</span>}
-    </button>
-  );
-}
-
-function EmptyState({ iconName, title, subtitle, action }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-stone-300 bg-white py-8 px-4 flex flex-col items-center text-center">
-      <Icon name={iconName} size={28} className="text-amber-300" />
-      <p className="text-sm font-medium text-stone-600 mt-2">{title}</p>
-      {subtitle && <p className="text-xs text-stone-400 mt-1">{subtitle}</p>}
-      {action && <div className="mt-3">{action}</div>}
-    </div>
-  );
-}
-
-function DreamThumbnail({ image }) {
-  const [failed, setFailed] = useState(false);
-  useEffect(() => { setFailed(false); }, [image]);
-  if (image && !failed) return <img src={image} alt="" className="w-full h-full object-cover" onError={() => setFailed(true)} />;
-  return (
-    <div className="w-full h-full flex flex-col items-center justify-center bg-stone-100">
-      <Icon name="Sparkles" size={18} className="text-stone-300" />
-      <span className="text-[10px] text-stone-300 mt-1 px-2 text-center">{failed ? '圖片無法載入' : '尚未加入圖片'}</span>
-    </div>
-  );
-}
-
+/* ════════════════════════════════════════════════════════
+   IMAGE UPLOAD FIELD
+════════════════════════════════════════════════════════ */
 function ImageUploadField({ value, onChange }) {
   const [warning, setWarning] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => { setFailed(false); }, [value]);
 
   function handleFile(e) {
-    const file = e.target.files && e.target.files[0];
-    e.target.value = '';
+    const file = e.target.files&&e.target.files[0]; e.target.value='';
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { setWarning('照片超過 10MB，請選小一點的'); return; }
+    if (file.size>10*1024*1024) { setWarning('照片超過 10MB，請選小一點的'); return; }
+    if (!IS_CONFIGURED) { setWarning('請先設定 Google Apps Script 網址才能上傳照片'); return; }
     setWarning(''); setUploading(true);
     const reader = new FileReader();
     reader.onload = async () => {
-      try {
-        const url = await uploadImageToDrive(reader.result);
-        onChange(url);
-      } catch (err) {
-        setWarning('上傳失敗：' + err.message);
-      } finally { setUploading(false); }
+      try { const url = await driveUploadImage(reader.result); onChange(url); setFailed(false); }
+      catch (err) { setWarning('上傳失敗：' + err.message); }
+      finally { setUploading(false); }
     };
-    reader.onerror = () => { setWarning('讀取照片失敗，請再試一次'); setUploading(false); };
+    reader.onerror = () => { setWarning('讀取失敗'); setUploading(false); };
     reader.readAsDataURL(file);
   }
 
   return (
-    <div className="space-y-2">
-      <label className={`block text-sm border border-dashed border-stone-300 rounded-lg px-2.5 py-2 text-stone-500 text-center ${uploading ? 'opacity-60' : 'cursor-pointer hover:bg-stone-50'}`}>
-        {uploading ? '上傳至 Google Drive 中...' : '📷 從手機／電腦上傳照片'}
-        <input type="file" accept="image/*" className="hidden" onChange={handleFile} disabled={uploading} />
+    <div style={{ display:'flex',flexDirection:'column',gap:6 }}>
+      <label style={{ display:'block',border:'1.5px dashed #D8D0C4',borderRadius:10,padding:'10px',textAlign:'center',fontSize:12,color:uploading?'#C0B8AE':'#A09688',cursor:uploading?'not-allowed':'pointer',background:uploading?'transparent':'rgba(255,255,255,.5)' }}>
+        {uploading ? '上傳至 Google Drive 中...' : '📷 上傳照片'}
+        <input type="file" accept="image/*" style={{display:'none'}} onChange={handleFile} disabled={uploading} />
       </label>
-      {warning && <p className="text-xs text-rose-500">{warning}</p>}
+      {warning && <p style={{fontSize:11,color:'#C0887A'}}>{warning}</p>}
       {value && (
-        <div className="relative h-24 rounded-lg overflow-hidden border border-stone-200">
-          <DreamThumbnail image={value} />
-          <button type="button" onClick={() => onChange('')} className="absolute top-1 right-1 bg-white/90 rounded-full p-1"><Icon name="X" size={12} /></button>
+        <div style={{position:'relative',height:80,borderRadius:10,overflow:'hidden',border:'1px solid #E0D9CF'}}>
+          {!failed
+            ? <img src={value} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}} onError={()=>setFailed(true)} />
+            : <div style={{width:'100%',height:'100%',background:'#F0EDE8',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:'#C0B8AE'}}>圖片無法載入</div>}
+          <button type="button" onClick={()=>onChange(null)} style={{position:'absolute',top:4,right:4,width:20,height:20,borderRadius:'50%',background:'rgba(255,255,255,.9)',border:'none',fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
         </div>
       )}
     </div>
   );
 }
 
-/* ================================================================
-   頂部列 / 底部導覽
-   ================================================================ */
+/* ════════════════════════════════════════════════════════
+   DEM — EditDialog (enhanced with image, updates, support)
+════════════════════════════════════════════════════════ */
+function EditDialog({ node, onSave, onDelete, onClose, support, onSupportChange }) {
+  const [title, setTitle]   = useState(node.title);
+  const [desc, setDesc]     = useState(node.desc||'');
+  const [image, setImage]   = useState(node.image||null);
+  const [updates, setUpdates] = useState(node.updates||[]);
+  const [updateText, setUpdateText] = useState('');
+  const [neededText, setNeededText] = useState('');
+  const [receivedText, setReceivedText] = useState('');
+  const [tab, setTab] = useState('basic'); // basic | updates | support
+  const titleRef = useRef();
+  const sup = support[node.id] || { needed:[], received:[] };
 
-function TopBar({ onSync, syncing }) {
+  useEffect(() => { titleRef.current?.focus(); titleRef.current?.select(); }, []);
+
+  function handleSave() {
+    if (!title.trim()) return;
+    onSave({ ...node, title:title.trim(), desc:desc.trim(), image, updates });
+    onClose();
+  }
+  function handleDelete() {
+    if (window.confirm(`確定要刪除「${node.title}」嗎？`)) { onDelete(node.id); onClose(); }
+  }
+  function addUpdate() {
+    if (!updateText.trim()) return;
+    const entry = { date:todayKey(), text:updateText.trim() };
+    setUpdates(prev=>[entry,...prev]); setUpdateText('');
+  }
+  function addNeeded() {
+    if (!neededText.trim()) return;
+    const newSup = { ...sup, needed:[...sup.needed, neededText.trim()] };
+    onSupportChange(node.id, newSup); setNeededText('');
+  }
+  function addReceived() {
+    if (!receivedText.trim()) return;
+    const newSup = { ...sup, received:[...sup.received, receivedText.trim()] };
+    onSupportChange(node.id, newSup); setReceivedText('');
+  }
+
+  const tabStyle = (t) => ({
+    background:'none', border:'none', cursor:'pointer', fontSize:12,
+    padding:'6px 12px', borderRadius:8, fontFamily:'inherit',
+    color: tab===t ? '#2D4A3E' : '#A09688',
+    background: tab===t ? 'rgba(45,74,62,.08)' : 'none',
+    fontWeight: tab===t ? 500 : 400,
+  });
+
   return (
-    <header className="sticky top-0 z-30 bg-stone-50 border-b border-stone-200">
-      <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-amber-500 flex items-center justify-center flex-shrink-0">
-            <Icon name="Sparkles" size={16} className="text-white" />
-          </div>
-          <div>
-            <h1 className="font-display text-base font-bold text-stone-800 leading-tight">共同生活設計</h1>
-            <p className="text-xs text-stone-400 leading-tight">蘋果派・松果・我們的共同生活</p>
+    <div onClick={onClose} style={{position:'fixed',inset:0,zIndex:200,background:'rgba(45,40,35,.25)',backdropFilter:'blur(6px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:'#FDFAF5',borderRadius:20,width:'100%',maxWidth:420,maxHeight:'85vh',overflow:'hidden',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(45,40,35,.14)',animation:'dialogIn .22s cubic-bezier(.22,1,.36,1) both'}}>
+        {/* Tabs */}
+        <div style={{display:'flex',gap:4,padding:'14px 16px 0',borderBottom:'1px solid #EDE8E0',flexShrink:0}}>
+          <button style={tabStyle('basic')} onClick={()=>setTab('basic')}>基本</button>
+          <button style={tabStyle('image')} onClick={()=>setTab('image')}>圖片</button>
+          <button style={tabStyle('updates')} onClick={()=>setTab('updates')}>更新 {updates.length>0?`(${updates.length})`:''}</button>
+          <button style={tabStyle('support')} onClick={()=>setTab('support')}>支持</button>
+        </div>
+
+        {/* Content */}
+        <div style={{overflowY:'auto',padding:'18px 20px',flex:1}}>
+          {tab==='basic' && (
+            <div style={{display:'flex',flexDirection:'column',gap:14}}>
+              <div>
+                <label style={{display:'block',fontSize:10,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:5}}>標題</label>
+                <input ref={titleRef} value={title} onChange={e=>setTitle(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSave()} placeholder="節點名稱…" />
+              </div>
+              <div>
+                <label style={{display:'block',fontSize:10,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:5}}>描述</label>
+                <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder="這個節點的意義…" rows={3} />
+              </div>
+            </div>
+          )}
+          {tab==='image' && (
+            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              <p style={{fontSize:12,color:'#A09688'}}>上傳一張代表這個節點的照片或願景圖</p>
+              <ImageUploadField value={image} onChange={setImage} />
+            </div>
+          )}
+          {tab==='updates' && (
+            <div style={{display:'flex',flexDirection:'column',gap:12}}>
+              <div style={{display:'flex',gap:8}}>
+                <input value={updateText} onChange={e=>setUpdateText(e.target.value)} placeholder="記錄一個新進展…" style={{flex:1}} onKeyDown={e=>e.key==='Enter'&&addUpdate()} />
+                <button onClick={addUpdate} className="btn-primary" style={{padding:'9px 14px',flexShrink:0}}>加入</button>
+              </div>
+              {updates.length===0 && <p style={{fontSize:12,color:'#C0B8AE',textAlign:'center',padding:'20px 0'}}>還沒有更新紀錄</p>}
+              {updates.map((u,i)=>(
+                <div key={i} style={{display:'flex',gap:8,borderBottom:'1px solid #EDE8E0',paddingBottom:8}}>
+                  <span style={{fontSize:11,color:'#C0B8AE',flexShrink:0,marginTop:1}}>{u.date}</span>
+                  <span style={{fontSize:13,color:'#3D3830',lineHeight:1.5}}>{u.text}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {tab==='support' && (
+            <div style={{display:'flex',flexDirection:'column',gap:16}}>
+              <div>
+                <p style={{fontSize:11,color:'#A09688',marginBottom:8,letterSpacing:'.04em'}}>我希望伴侶如何支持我</p>
+                <div style={{display:'flex',gap:8,marginBottom:8}}>
+                  <input value={neededText} onChange={e=>setNeededText(e.target.value)} placeholder="例如：陪我討論、給我回饋…" style={{flex:1}} onKeyDown={e=>e.key==='Enter'&&addNeeded()} />
+                  <button onClick={addNeeded} className="btn-primary" style={{padding:'9px 14px',flexShrink:0}}>加入</button>
+                </div>
+                {sup.needed.length===0 && <p style={{fontSize:11,color:'#C0B8AE'}}>尚未填寫</p>}
+                {sup.needed.map((n,i)=><p key={i} style={{fontSize:12,color:'#3D3830',padding:'5px 0',borderBottom:'1px solid #F0EDE8'}}>· {n}</p>)}
+              </div>
+              <div>
+                <p style={{fontSize:11,color:'#A09688',marginBottom:8,letterSpacing:'.04em'}}>已收到的支持</p>
+                <div style={{display:'flex',gap:8,marginBottom:8}}>
+                  <input value={receivedText} onChange={e=>setReceivedText(e.target.value)} placeholder="記錄一個收到的支持…" style={{flex:1}} onKeyDown={e=>e.key==='Enter'&&addReceived()} />
+                  <button onClick={addReceived} className="btn-primary" style={{padding:'9px 14px',flexShrink:0}}>加入</button>
+                </div>
+                {sup.received.length===0 && <p style={{fontSize:11,color:'#C0B8AE'}}>尚未紀錄</p>}
+                {sup.received.map((n,i)=>(
+                  <p key={i} style={{fontSize:12,color:'#2D4A3E',padding:'5px 0',borderBottom:'1px solid #F0EDE8'}}>✓ {n}</p>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 20px',borderTop:'1px solid #EDE8E0',flexShrink:0}}>
+          <button onClick={handleDelete} style={{background:'none',border:'none',fontSize:12,color:'#C0887A',fontFamily:'inherit',cursor:'pointer'}}>刪除節點</button>
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={onClose} className="btn-ghost" style={{padding:'7px 16px',fontSize:12}}>取消</button>
+            <button onClick={handleSave} className="btn-primary" style={{padding:'7px 18px',fontSize:12}}>儲存</button>
           </div>
         </div>
-        <button onClick={onSync} disabled={syncing} title="重新讀取最新資料" className="p-2 text-stone-400 hover:text-stone-700">
-          <Icon name="RefreshCw" size={16} className={syncing ? 'animate-spin' : ''} />
-        </button>
       </div>
-    </header>
+    </div>
   );
 }
 
-function BottomNav({ active, onChange }) {
-  const items = [
-    { key: 'dashboard', label: '首頁',    iconName: 'Home'       },
-    { key: 'calendar',  label: '月曆',    iconName: 'Calendar'   },
-    { key: 'dreams',    label: '夢想地圖', iconName: 'Sparkles'   },
-    { key: 'kanban',    label: '看板',    iconName: 'LayoutGrid'  },
-    { key: 'memories',  label: '回憶牆',  iconName: 'Camera'     },
-  ];
-  return (
-    <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-stone-200">
-      <div className="max-w-5xl mx-auto px-2 grid grid-cols-5">
-        {items.map(it => {
-          const active_ = active === it.key;
-          return (
-            <button key={it.key} onClick={() => onChange(it.key)}
-              className={`flex flex-col items-center justify-center gap-0.5 py-2.5 ${active_ ? 'text-amber-600' : 'text-stone-400'}`}>
-              <Icon name={it.iconName} size={20} strokeWidth={active_ ? 2.5 : 2} />
-              <span className={`text-[10px] ${active_ ? 'font-semibold' : ''}`}>{it.label}</span>
-            </button>
-          );
-        })}
+/* ════════════════════════════════════════════════════════
+   DEM — OrbitNode
+════════════════════════════════════════════════════════ */
+function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder }) {
+  const [hovered, setHovered] = useState(false);
+  if (isPlaceholder) {
+    return (
+      <div className="node-orbit" style={{left:`${pos.x}%`,top:`${pos.y}%`,animationDelay:`${delay}ms`}}>
+        <div onClick={onZoomIn} onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)}
+          style={{width:90,height:90,borderRadius:'50%',border:`2px dashed ${hovered?'#2D4A3E':'#C8C0B4'}`,background:hovered?'rgba(45,74,62,.04)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',transition:'all .2s'}}>
+          <span style={{fontSize:22,color:hovered?'#2D4A3E':'#C8C0B4'}}>＋</span>
+        </div>
       </div>
-    </nav>
+    );
+  }
+  return (
+    <div className="node-orbit" style={{left:`${pos.x}%`,top:`${pos.y}%`,animationDelay:`${delay}ms`}} onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)}>
+      <div onClick={e=>{e.stopPropagation();onEdit();}} style={{position:'absolute',top:-6,right:-6,width:22,height:22,borderRadius:'50%',background:hovered?'#2D4A3E':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',opacity:hovered?1:0,transition:'all .15s',zIndex:2,fontSize:11,color:'#F8F6F1'}}>✎</div>
+      <div onClick={onZoomIn}
+        style={{width:104,height:104,borderRadius:'50%',background:hovered?'rgba(255,255,255,.92)':'rgba(255,255,255,.72)',border:`1.5px solid ${hovered?'rgba(45,74,62,.3)':'rgba(180,172,160,.4)'}`,backdropFilter:'blur(8px)',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',cursor:'pointer',transition:'all .18s',transform:hovered?'scale(1.05)':'scale(1)',boxShadow:hovered?'0 4px 20px rgba(45,74,62,.10)':'0 2px 8px rgba(0,0,0,.04)',position:'relative',overflow:'hidden'}}>
+        {node.image && (
+          <div style={{position:'absolute',inset:0,borderRadius:'50%',overflow:'hidden',opacity:.2}}>
+            <img src={node.image} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}} onError={()=>{}} />
+          </div>
+        )}
+        <span style={{fontSize:node.title.length>7?11:12,fontWeight:500,color:hovered?'#2D4A3E':'#3D3830',textAlign:'center',lineHeight:1.5,letterSpacing:'.03em',padding:'0 10px',transition:'color .18s',position:'relative'}}>
+          {node.title}
+        </span>
+      </div>
+    </div>
   );
 }
 
-/* ================================================================
-   首頁 Dashboard
-   ================================================================ */
+/* ════════════════════════════════════════════════════════
+   DEM — DreamExpansionMap
+════════════════════════════════════════════════════════ */
+function DreamExpansionMap({ data, setData, support, onSupportChange }) {
+  const [stack, setStack]          = useState([{id:'dream',title:data.dream.title,depth:0}]);
+  const [phase, setPhase]          = useState('idle');
+  const [pendingStack, setPending] = useState(null);
+  const [animating, setAnimating]  = useState(false);
+  const [editTarget, setEditTarget] = useState(null);
 
-function Dashboard({ dreams, projects, tasks, events, openDream, goToTab }) {
-  const today = getTodayKey();
-  const weekEnd = new Date(); weekEnd.setDate(weekEnd.getDate() + 7);
-  const weekEndStr = weekEnd.toISOString().slice(0, 10);
-  const monthPrefix = today.slice(0, 7);
+  const current    = stack[stack.length-1];
+  const depthLabel = ['Life Domains','Projects','Actions'][current.depth]||'';
 
-  const weekTasks = tasks.filter(t => t.status === '進行中' || (t.dueDate && t.dueDate >= today && t.dueDate <= weekEndStr));
-  const counts = { '待開始': 0, '進行中': 0, '已完成': 0 };
-  weekTasks.forEach(t => { if (counts[t.status] !== undefined) counts[t.status]++; });
+  const getList = useCallback((id,depth)=>{
+    if(depth===0) return data.domains;
+    if(depth===1) return data.projects[id]||[];
+    if(depth===2) return data.actions[id]||[];
+    return [];
+  },[data]);
 
-  const recentDone = [...tasks].filter(t => t.status === '已完成')
-    .sort((a, b) => (b.dueDate||'').localeCompare(a.dueDate||'')).slice(0, 4);
+  const children  = getList(current.id, current.depth);
+  const slots     = [...children,...Array(Math.max(0,8-children.length)).fill(null)].slice(0,9);
+  const positions = orbitPositions(slots.length);
 
-  const monthEvents = events.filter(e => e.date.startsWith(monthPrefix)).sort((a,b) => a.date.localeCompare(b.date));
-  const todayEvents = events.filter(e => e.date === today);
+  const navigate = useCallback((ns)=>{ if(animating) return; setAnimating(true); setPhase('exit'); setPending(ns); },[animating]);
+  useEffect(()=>{
+    if(phase==='exit'){ const t=setTimeout(()=>{ setStack(pendingStack); setPhase('enter'); },260); return()=>clearTimeout(t); }
+    if(phase==='enter'){ const t=setTimeout(()=>{ setPhase('idle'); setAnimating(false); setPending(null); },420); return()=>clearTimeout(t); }
+  },[phase,pendingStack]);
 
-  const byOwner = { apple: [], pine: [], us: [] };
-  dreams.forEach(d => { if (byOwner[d.owner]) byOwner[d.owner].push(d); });
+  const zoomIn = useCallback((node)=>{ if(current.depth>=2) return; navigate([...stack,{id:node.id,title:node.title,depth:current.depth+1}]); },[stack,current,navigate]);
+  const zoomTo = useCallback((idx)=>{ if(idx===stack.length-1) return; navigate(stack.slice(0,idx+1)); },[stack,navigate]);
+
+  const updateNode = useCallback((layer,parentId,updated)=>{
+    setData(d=>{
+      if(layer==='dream') return{...d,dream:updated};
+      if(layer==='domains') return{...d,domains:d.domains.map(n=>n.id===updated.id?updated:n)};
+      if(layer==='projects') return{...d,projects:{...d.projects,[parentId]:(d.projects[parentId]||[]).map(n=>n.id===updated.id?updated:n)}};
+      if(layer==='actions') return{...d,actions:{...d.actions,[parentId]:(d.actions[parentId]||[]).map(n=>n.id===updated.id?updated:n)}};
+      return d;
+    });
+    setStack(s=>s.map(item=>item.id===updated.id?{...item,title:updated.title}:item));
+  },[setData]);
+
+  const deleteNode = useCallback((layer,parentId,id)=>{
+    setData(d=>{
+      if(layer==='domains') return{...d,domains:d.domains.filter(n=>n.id!==id)};
+      if(layer==='projects') return{...d,projects:{...d.projects,[parentId]:(d.projects[parentId]||[]).filter(n=>n.id!==id)}};
+      if(layer==='actions') return{...d,actions:{...d.actions,[parentId]:(d.actions[parentId]||[]).filter(n=>n.id!==id)}};
+      return d;
+    });
+    setStack(s=>{ const i=s.findIndex(item=>item.id===id); return i>-1?s.slice(0,i):s; });
+  },[setData]);
+
+  const addNode = useCallback((layer,parentId)=>{
+    const n = layer==='actions' ? makeAction('新節點') : makeNode('新節點');
+    setData(d=>{
+      if(layer==='domains') return{...d,domains:[...d.domains,n]};
+      if(layer==='projects') return{...d,projects:{...d.projects,[parentId]:[...(d.projects[parentId]||[]),n]}};
+      if(layer==='actions') return{...d,actions:{...d.actions,[parentId]:[...(d.actions[parentId]||[]),n]}};
+      return d;
+    });
+    setTimeout(()=>setEditTarget({node:n,layer,parentId}),50);
+  },[setData]);
+
+  const currentLayer = current.depth===0?'domains':current.depth===1?'projects':'actions';
 
   return (
-    <div className="space-y-6 pb-6">
-      <section>
-        <SectionTitle icon={<Icon name="Sparkles" size={16} className="text-amber-500" />} title="今日狀態" subtitle={getTodayLabel()} />
-        <div className="grid grid-cols-2 gap-3">
-          {['apple','pine'].map(key => {
-            const o = OWNERS[key];
-            const relevant = todayEvents.filter(e => e.owner === key || e.owner === 'us');
-            const stress = relevant.some(e => e.stress === 'high') ? 'high' : 'normal';
+    <div style={{flex:1,position:'relative',display:'flex',flexDirection:'column',fontFamily:"'Noto Sans TC','PingFang TC',system-ui,sans-serif",overflow:'hidden',userSelect:'none'}}>
+      {/* Top breadcrumb */}
+      <div style={{padding:'18px 24px 0',display:'flex',alignItems:'center',gap:6,minHeight:44,flexShrink:0}}>
+        {stack.map((s,i)=>(
+          <span key={s.id+i} style={{display:'flex',alignItems:'center',gap:6}}>
+            {i>0&&<span style={{color:'#C8C0B4',fontSize:13}}>›</span>}
+            <button onClick={()=>zoomTo(i)} style={{background:'none',border:'none',padding:'2px 4px',cursor:i===stack.length-1?'default':'pointer',fontSize:13,fontFamily:'inherit',color:i===stack.length-1?'#3D3830':'#A09688',fontWeight:i===stack.length-1?500:400,transition:'color .15s'}} onMouseEnter={e=>{if(i<stack.length-1)e.target.style.color='#2D4A3E'}} onMouseLeave={e=>{if(i<stack.length-1)e.target.style.color='#A09688'}}>{s.title}</button>
+          </span>
+        ))}
+        {depthLabel&&<span style={{marginLeft:8,fontSize:10,letterSpacing:'.12em',color:'#A09688',textTransform:'uppercase',padding:'3px 10px',border:'1px solid #DDD8D0',borderRadius:20,background:'rgba(255,255,255,.7)'}}>{depthLabel}</span>}
+        <div style={{marginLeft:'auto'}}>
+          <button onClick={()=>setEditTarget({node:data.dream,layer:'dream',parentId:null})} style={{background:'none',border:'1.5px solid #E0D9CF',borderRadius:20,padding:'4px 14px',fontSize:11,color:'#A09688',cursor:'pointer',fontFamily:'inherit',letterSpacing:'.06em',transition:'all .15s'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#2D4A3E';e.currentTarget.style.color='#2D4A3E'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='#E0D9CF';e.currentTarget.style.color='#A09688'}}>編輯夢想</button>
+        </div>
+      </div>
+
+      {/* Map */}
+      <div style={{flex:1,position:'relative'}}>
+        <div className={`phase-${phase}`} style={{position:'absolute',inset:0}}>
+          <svg className="svg-lines" viewBox="0 0 100 100" preserveAspectRatio="none">
+            {slots.map((node,i)=>{const pos=positions[i];return(<line key={i} x1="50" y1="50" x2={pos.x} y2={pos.y} stroke={node?'#C8C0B4':'#E0D8CE'} strokeWidth="0.5" strokeDasharray={node?'3 5':'2 7'} opacity={node?.5:.25}/>);})}
+          </svg>
+          <div className="node-center">
+            <div style={{width:148,height:148,borderRadius:'50%',background:'#2D4A3E',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 8px 40px rgba(45,74,62,.18)',cursor:stack.length>1?'pointer':'default',position:'relative',overflow:'hidden'}} onClick={()=>stack.length>1&&zoomTo(stack.length-2)}>
+              {/* Show dream image subtly in center if available */}
+              {stack.length===1&&data.dream.image&&<img src={data.dream.image} alt="" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:.15}} onError={()=>{}} />}
+              <span style={{fontFamily:"'Noto Serif TC',serif",fontSize:current.title.length>7?12:14,fontWeight:400,color:'#F8F6F1',textAlign:'center',lineHeight:1.7,letterSpacing:'.05em',padding:'0 18px',position:'relative'}}>{current.title}</span>
+            </div>
+            {stack.length>1&&<div style={{textAlign:'center',marginTop:8,fontSize:10,color:'#C0B8AE',letterSpacing:'.06em'}}>點擊返回</div>}
+          </div>
+          {slots.map((node,i)=>{const pos=positions[i];return(<OrbitNode key={node?node.id:'empty_'+i} node={node} pos={pos} delay={phase==='enter'?i*25:0} isPlaceholder={!node} onZoomIn={()=>node?zoomIn(node):addNode(currentLayer,current.id)} onEdit={()=>node&&setEditTarget({node,layer:currentLayer,parentId:current.id})}/>);})}
+        </div>
+      </div>
+
+      {stack.length===1&&phase==='idle'&&<div style={{textAlign:'center',padding:'0 0 16px',fontSize:11,color:'#C8C0B4',letterSpacing:'.08em',flexShrink:0}}>點擊節點展開 · 點右上角 ✎ 進行編輯</div>}
+
+      {editTarget&&(
+        <EditDialog node={editTarget.node} onSave={u=>updateNode(editTarget.layer,editTarget.parentId,u)} onDelete={id=>deleteNode(editTarget.layer,editTarget.parentId,id)} onClose={()=>setEditTarget(null)} support={support} onSupportChange={onSupportChange} />
+      )}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════
+   HOME PAGE
+════════════════════════════════════════════════════════ */
+function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage }) {
+  const today  = todayKey();
+  const weekEnd = new Date(); weekEnd.setDate(weekEnd.getDate()+7);
+  const weekStr = weekEnd.toISOString().slice(0,10);
+  const month   = today.slice(0,7);
+
+  const todayEvs    = calEvents.filter(e=>e.date===today);
+  const upcomingEvs = calEvents.filter(e=>e.date>today).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,5);
+
+  const allActions = useMemo(()=>{
+    const r=[];
+    demData.domains.forEach(dom=>{
+      (demData.projects[dom.id]||[]).forEach(proj=>{
+        (demData.actions[proj.id]||[]).forEach(a=>{
+          r.push({...a,domainTitle:dom.title,projectTitle:proj.title});
+        });
+      });
+    });
+    return r;
+  },[demData]);
+
+  const todayTodos = allActions.filter(a=>a.dueDate===today&&a.status!=='done');
+  const doingTodos = allActions.filter(a=>a.status==='doing').slice(0,4);
+
+  return (
+    <div className="page-scroll">
+      <div style={{padding:'24px 24px 40px',maxWidth:680,margin:'0 auto'}}>
+        <div style={{marginBottom:24}}>
+          <p style={{fontSize:11,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:3}}>{todayLabel()}</p>
+          <h1 style={{fontFamily:"'Noto Serif TC',serif",fontSize:20,fontWeight:400,color:'#2D2820',letterSpacing:'.04em'}}>早安，蘋果派 & 松果 ✦</h1>
+        </div>
+
+        {/* Status cards */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:22}}>
+          {[APPLE,PINE].map(p=>{
+            const st = todayStatus[p.key];
+            const isHigh = st.stress==='high';
+            const evs = todayEvs.filter(e=>e.owner===p.key||e.owner==='us');
             return (
-              <div key={key} className="rounded-2xl p-3.5 bg-white border border-stone-200">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-8 h-8 rounded-xl bg-stone-100 flex items-center justify-center flex-shrink-0">
-                    <Icon name={o.iconName} size={16} className={o.color} strokeWidth={2.2} />
-                  </div>
-                  <span className="font-semibold text-stone-800 text-sm">{o.name}</span>
+              <div key={p.key} className="card" style={{padding:'16px'}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                  <span style={{width:10,height:10,borderRadius:'50%',background:p.color,display:'inline-block'}}></span>
+                  <span style={{fontSize:13,fontWeight:500,color:'#2D2820'}}>{p.name}</span>
+                  <span style={{marginLeft:'auto',fontSize:11,padding:'2px 8px',borderRadius:12,background:isHigh?'rgba(192,136,122,.12)':'rgba(91,163,123,.12)',color:isHigh?'#C0887A':'#5BA37B'}}>{isHigh?'高壓':'一般'}</span>
                 </div>
-                <div className="mb-1.5"><StressIndicator level={stress} /></div>
-                {relevant.length === 0
-                  ? <p className="text-xs text-stone-300">今天還沒有安排</p>
-                  : <div className="space-y-0.5">{relevant.slice(0,2).map(e => <p key={e.id} className="text-xs text-stone-600 truncate">{e.title}</p>)}{relevant.length > 2 && <p className="text-xs text-stone-400">還有 {relevant.length-2} 件事</p>}</div>}
+                {evs.length===0 ? <p style={{fontSize:12,color:'#C0B8AE'}}>今天沒有安排</p>
+                  : evs.slice(0,2).map(e=><p key={e.id} style={{fontSize:12,color:'#7D7468',marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>· {e.title}</p>)}
+                <button onClick={()=>setTodayStatus(p.key,'stress',isHigh?'normal':'high')} style={{marginTop:10,fontSize:10,padding:'3px 10px',borderRadius:10,border:`1px solid ${isHigh?'#C0887A':'#E0D9CF'}`,background:'none',color:isHigh?'#C0887A':'#A09688',cursor:'pointer'}}>
+                  {isHigh?'切換為一般':'標記高壓'}
+                </button>
               </div>
             );
           })}
         </div>
-      </section>
 
-      <section>
-        <SectionTitle icon={<Icon name="LayoutGrid" size={16} className="text-amber-500" />} title="本週共同待辦"
-          action={<button onClick={() => goToTab('kanban')} className="text-xs text-amber-600 font-medium flex items-center gap-0.5">查看看板<Icon name="ArrowRight" size={12} /></button>} />
-        <div className="grid grid-cols-3 gap-2">
-          {TASK_STATUSES.map(st => (
-            <button key={st} onClick={() => goToTab('kanban')} className="rounded-xl border border-stone-200 bg-white p-3 text-left">
-              <p className="text-xs text-stone-400 mb-1">{st}</p>
-              <p className="text-xl font-bold text-stone-800">{counts[st]}</p>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section>
-        <SectionTitle icon={<Icon name="CheckCircle2" size={16} className="text-emerald-500" />} title="最近完成事項" subtitle="完成的事不會消失，永遠留著" />
-        {recentDone.length === 0 ? <p className="text-sm text-stone-400">目前還沒有完成的事項。</p> : (
-          <div className="space-y-2">
-            {recentDone.map(t => {
-              const { project, dream } = getBreadcrumb(t, projects, dreams);
-              return (
-                <div key={t.id} className="rounded-xl border border-stone-200 bg-white p-3 flex items-start gap-2">
-                  <Icon name="CheckCircle2" size={16} className="text-emerald-500 flex-shrink-0 mt-0.5" />
-                  <div className="min-w-0"><p className="text-sm font-medium text-stone-800">{t.title}</p><DreamTrail dream={dream} project={project} /></div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      <section>
-        <SectionTitle icon={<Icon name="Calendar" size={16} className="text-amber-500" />} title="本月重要事件"
-          action={<button onClick={() => goToTab('calendar')} className="text-xs text-amber-600 font-medium flex items-center gap-0.5">查看月曆<Icon name="ArrowRight" size={12} /></button>} />
-        {monthEvents.length === 0 ? <p className="text-sm text-stone-400">本月還沒有事件。</p> : (
-          <div className="space-y-2">
-            {monthEvents.map(e => (
-              <div key={e.id} className="rounded-xl border border-stone-200 bg-white p-3 flex items-center gap-3">
-                <div className="w-11 h-11 rounded-lg bg-stone-100 flex flex-col items-center justify-center flex-shrink-0">
-                  <span className="text-[10px] text-stone-400">{e.date.slice(5,7)}月</span>
-                  <span className="text-sm font-bold text-stone-700">{e.date.slice(8,10)}</span>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2"><EventIconRow event={e} size={15} /><p className="text-sm font-medium text-stone-800 truncate">{e.title}</p></div>
-                  <div className="flex flex-wrap gap-1 mt-1">{e.tags.map(tag => <span key={tag} className="text-[10px] text-stone-500 bg-stone-100 rounded-full px-1.5 py-0.5">{tag}</span>)}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section>
-        <SectionTitle icon={<Icon name="Star" size={16} className="text-amber-500" />} title="夢想進度摘要"
-          action={<button onClick={() => goToTab('dreams')} className="text-xs text-amber-600 font-medium flex items-center gap-0.5">夢想地圖<Icon name="ArrowRight" size={12} /></button>} />
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {['apple','pine','us'].map(key => (
-            <div key={key} className="rounded-2xl border border-stone-200 bg-white p-3">
-              <IdentityBadge owner={key} size="md" />
-              <div className="mt-2 space-y-2.5">
-                {byOwner[key].length === 0 && <p className="text-xs text-stone-300">尚未新增夢想</p>}
-                {byOwner[key].slice(0,3).map(d => (
-                  <button key={d.id} onClick={() => openDream(d.id)} className="block w-full text-left">
-                    <p className="text-xs text-stone-700 font-medium truncate mb-1">{d.title}</p>
-                    <ProgressBar value={getDreamProgress(d.id, projects, tasks, dreams)} />
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
-}
-
-/* ================================================================
-   月曆
-   ================================================================ */
-
-function CalendarView({ events, year, month, setYear, setMonth, openDay }) {
-  const cells = getMonthGrid(year, month);
-  function changeMonth(delta) {
-    let m = month + delta, y = year;
-    if (m < 0) { m = 11; y--; } if (m > 11) { m = 0; y++; }
-    setMonth(m); setYear(y);
-  }
-  return (
-    <div className="pb-6">
-      <SectionTitle icon={<Icon name="Calendar" size={16} className="text-amber-500" />} title="共同生活月曆" subtitle="個人事件與共同事件" />
-      <div className="flex items-center justify-between mb-3">
-        <button onClick={() => changeMonth(-1)} className="p-1.5 rounded-lg border border-stone-200 bg-white"><Icon name="ChevronLeft" size={16} /></button>
-        <p className="font-display font-bold text-stone-800">{year}年 {MONTH_NAMES[month]}</p>
-        <button onClick={() => changeMonth(1)} className="p-1.5 rounded-lg border border-stone-200 bg-white"><Icon name="ChevronRight" size={16} /></button>
-      </div>
-      <div className="grid grid-cols-7 text-center text-xs text-stone-400 mb-1">
-        {WEEKDAY_NAMES.map(w => <div key={w} className="py-1">{w}</div>)}
-      </div>
-      <div className="grid grid-cols-7 gap-1">
-        {cells.map((day, i) => {
-          if (day === null) return <div key={i}></div>;
-          const dateKey = toDateKey(year, month, day);
-          const dayEvs  = events.filter(e => e.date === dateKey);
-          const isToday = dateKey === getTodayKey();
-          return (
-            <button key={i} onClick={() => openDay(dateKey)}
-              className={`aspect-square rounded-lg p-1 flex flex-col items-center border ${isToday ? 'border-amber-400 bg-amber-50' : 'border-stone-100 bg-white'}`}>
-              <span className={`text-xs ${isToday ? 'font-bold text-amber-700' : 'text-stone-600'}`}>{day}</span>
-              <div className="flex flex-col items-center gap-0.5 mt-1">
-                {dayEvs.slice(0,2).map(e => (
-                  <span key={e.id} className="inline-flex items-center gap-0.5">
-                    <IdentityIcon owner={e.owner} size={10} />
-                    <StressMarker level={e.stress} size={5} />
-                  </span>
-                ))}
-                {dayEvs.length > 2 && <span className="text-[8px] text-stone-400">+{dayEvs.length-2}</span>}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-      <div className="mt-4 rounded-xl border border-stone-200 bg-white p-3 space-y-3">
-        <div>
-          <p className="text-xs font-semibold text-stone-500 mb-2">身份</p>
-          <div className="flex gap-4">
-            {['apple','pine','us'].map(key => { const o = OWNERS[key]; return (
-              <span key={key} className="inline-flex items-center gap-1.5 text-xs text-stone-600">
-                <Icon name={o.iconName} size={14} className={o.color} strokeWidth={2.2} />{o.name}
-              </span>
-            ); })}
-          </div>
-        </div>
-        <div>
-          <p className="text-xs font-semibold text-stone-500 mb-2">壓力狀態</p>
-          <div className="flex gap-4">
-            {Object.entries(STRESS_STYLES).map(([k,v]) => (
-              <span key={k} className="inline-flex items-center gap-1 text-xs text-stone-500">
-                <span className={`w-2 h-2 rounded-full ${v.dot}`}></span>{v.label}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DayModal({ dateKey, events, onClose, onAddEvent }) {
-  const [title, setTitle] = useState('');
-  const [time, setTime] = useState('19:00');
-  const [owner, setOwner] = useState('us');
-  const [stress, setStress] = useState('normal');
-  const [tagsInput, setTagsInput] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const dayEvents = events.filter(e => e.date === dateKey).sort((a,b) => a.time.localeCompare(b.time));
-  function submit() {
-    if (!title.trim()) return;
-    onAddEvent(dateKey, { time, title: title.trim(), location: '', note: '', owner, stress, tags: tagsInput.split(',').map(t=>t.trim()).filter(Boolean) });
-    setTitle(''); setTagsInput(''); setShowForm(false);
-  }
-  return (
-    <ModalShell onClose={onClose}>
-      <div className="p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-display text-lg font-bold text-stone-800">{dateKey}</h3>
-          <button onClick={onClose} className="text-stone-400"><Icon name="X" size={20} /></button>
-        </div>
-        <div className="space-y-2 mb-4">
-          {dayEvents.length === 0 && <p className="text-sm text-stone-400">這天還沒有事件</p>}
-          {dayEvents.map(e => (
-            <div key={e.id} className="rounded-xl border border-stone-200 p-3">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-semibold text-stone-800">{e.title}</span>
-                <IdentityBadge owner={e.owner} />
-              </div>
-              <div className="mb-1.5"><EventIconRow event={e} size={14} /></div>
-              <div className="flex items-center gap-3 text-xs text-stone-500 mb-1.5">
-                <span className="inline-flex items-center gap-1"><Icon name="Clock" size={11} />{e.time}</span>
-                {e.location && <span className="inline-flex items-center gap-1"><Icon name="MapPin" size={11} />{e.location}</span>}
-              </div>
-              <StressIndicator level={e.stress} />
-              {e.tags.length > 0 && <div className="flex flex-wrap gap-1 mt-1">{e.tags.map(tag => <span key={tag} className="inline-flex items-center gap-0.5 text-[10px] text-stone-500 bg-stone-100 rounded-full px-1.5 py-0.5"><Icon name="Tag" size={9} />{tag}</span>)}</div>}
-            </div>
-          ))}
-        </div>
-        {!showForm
-          ? <button onClick={() => setShowForm(true)} className="w-full rounded-xl border border-dashed border-stone-300 text-stone-500 text-sm py-2.5 flex items-center justify-center gap-1"><Icon name="Plus" size={14} />新增事件</button>
-          : (
-            <div className="rounded-xl border border-stone-200 p-3 space-y-2">
-              <input value={title} onChange={e => setTitle(e.target.value)} placeholder="事件標題" className="w-full text-sm border border-stone-200 rounded-lg px-2.5 py-1.5" />
-              <div className="grid grid-cols-2 gap-2">
-                <input type="time" value={time} onChange={e => setTime(e.target.value)} className="text-sm border border-stone-200 rounded-lg px-2.5 py-1.5" />
-                <IdentitySelect value={owner} onChange={setOwner} />
-              </div>
-              <select value={stress} onChange={e => setStress(e.target.value)} className="w-full text-sm border border-stone-200 rounded-lg px-2.5 py-1.5">
-                {Object.entries(STRESS_STYLES).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
-              </select>
-              <input value={tagsInput} onChange={e => setTagsInput(e.target.value)} placeholder="標籤（逗號分隔，如：出差,不回家）" className="w-full text-sm border border-stone-200 rounded-lg px-2.5 py-1.5" />
-              <div className="flex gap-2">
-                <button onClick={submit} className="flex-1 bg-amber-500 text-white text-sm font-medium rounded-lg py-2">儲存</button>
-                <button onClick={() => setShowForm(false)} className="px-4 text-sm text-stone-400">取消</button>
-              </div>
-            </div>
-          )}
-      </div>
-    </ModalShell>
-  );
-}
-
-/* ================================================================
-   夢想地圖
-   ================================================================ */
-
-function DreamMapView({ dreams, projects, tasks, openDream, onAddDream }) {
-  const [showForm, setShowForm] = useState(false);
-  const [title, setTitle] = useState('');
-  const [owner, setOwner] = useState('us');
-  const [description, setDescription] = useState('');
-  const [why, setWhy] = useState('');
-  const [image, setImage] = useState('');
-  const rots = ['rotate-1','-rotate-1','rotate-2','-rotate-2','rotate-1','-rotate-1'];
-  function submit() {
-    if (!title.trim()) return;
-    onAddDream({ title: title.trim(), owner, description: description.trim(), why: why.trim(), image: image.trim() });
-    setTitle(''); setDescription(''); setWhy(''); setImage(''); setShowForm(false);
-  }
-  return (
-    <div className="pb-6">
-      <SectionTitle icon={<Icon name="Sparkles" size={16} className="text-amber-500" />} title="人生夢想地圖" subtitle="我的・伴侶的・我們的，一起看見"
-        action={!showForm && <button onClick={() => setShowForm(true)} className="text-xs text-amber-600 font-medium flex items-center gap-0.5"><Icon name="Plus" size={13} />新增夢想</button>} />
-      {showForm && (
-        <div className="rounded-xl border border-stone-200 bg-white p-3 mb-4 space-y-2">
-          <input value={title} onChange={e => setTitle(e.target.value)} placeholder="這個夢想叫什麼？" className="w-full text-sm border border-stone-200 rounded-lg px-2.5 py-1.5" />
-          <IdentitySelect value={owner} onChange={setOwner} />
-          <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="描述（選填）" rows={2} className="w-full text-sm border border-stone-200 rounded-lg px-2.5 py-1.5" />
-          <textarea value={why} onChange={e => setWhy(e.target.value)} placeholder="為什麼這對你重要？（選填）" rows={2} className="w-full text-sm border border-stone-200 rounded-lg px-2.5 py-1.5" />
-          <ImageUploadField value={image} onChange={setImage} />
-          <div className="flex gap-2">
-            <button onClick={submit} className="flex-1 bg-amber-500 text-white text-sm font-medium rounded-lg py-1.5">建立夢想</button>
-            <button onClick={() => setShowForm(false)} className="px-4 text-sm text-stone-400">取消</button>
-          </div>
-        </div>
-      )}
-      {dreams.length === 0 && !showForm
-        ? <EmptyState iconName="Sparkles" title="這裡還是空的" subtitle="開始畫出你們的第一個夢想吧" action={<button onClick={() => setShowForm(true)} className="bg-amber-500 text-white text-sm font-medium rounded-lg px-4 py-2 flex items-center gap-1"><Icon name="Plus" size={14} />新增夢想</button>} />
-        : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {dreams.map((d, i) => {
-              const progress = getDreamProgress(d.id, projects, tasks, dreams);
-              return (
-                <button key={d.id} onClick={() => openDream(d.id)} className={`text-left bg-white rounded-2xl overflow-hidden shadow-sm border border-stone-100 ${rots[i%6]}`}>
-                  <div className="relative h-40">
-                    <DreamThumbnail image={d.image} />
-                    <div className="absolute inset-0" style={{ background: 'linear-gradient(to top,rgba(28,25,23,.85) 0%,rgba(28,25,23,.3) 45%,transparent 70%)' }}></div>
-                    <div className="absolute top-2 left-2 right-2 flex items-center justify-between gap-1">
-                      <IdentityBadge owner={d.owner} />
-                      <DreamStatusPill status={d.status} />
-                    </div>
-                    <p className="absolute bottom-2 left-2.5 right-2.5 text-white text-sm font-semibold leading-snug" style={{ display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden',textShadow:'0 1px 4px rgba(0,0,0,.5)' }}>{d.title}</p>
-                  </div>
-                  <div className="p-2.5"><ProgressBar value={progress} /></div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-    </div>
-  );
-}
-
-function ProjectRow({ project, tasks, onAddTask, onDeleteProject, onUpdateProject, cycleTask, onOpenTask }) {
-  const [adding, setAdding] = useState(false);
-  const [newTitle, setNewTitle] = useState('');
-  const [isEditing, setIsEditing] = useState(false);
-  const [editTitle, setEditTitle] = useState(project.title);
-  const [editOwner, setEditOwner] = useState(project.owner);
-  const projTasks = tasks.filter(t => t.projectId === project.id);
-  function submitAdd() { if (!newTitle.trim()) return; onAddTask(project.id, newTitle.trim()); setNewTitle(''); setAdding(false); }
-  function saveEdit() { if (!editTitle.trim()) return; onUpdateProject(project.id, { title: editTitle.trim(), owner: editOwner }); setIsEditing(false); }
-  return (
-    <div>
-      {isEditing
-        ? (
-          <div className="space-y-1.5 mb-2">
-            <input value={editTitle} onChange={e => setEditTitle(e.target.value)} className="w-full text-sm border border-stone-200 rounded-lg px-2 py-1" />
-            <div className="flex gap-2 items-center">
-              <IdentitySelect value={editOwner} onChange={setEditOwner} />
-              <button onClick={saveEdit} className="text-xs bg-amber-500 text-white rounded-lg px-2.5 py-1.5">儲存</button>
-              <button onClick={() => setIsEditing(false)} className="text-xs text-stone-400">取消</button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between mb-1.5 gap-2">
-            <p className="text-sm font-semibold text-stone-700 flex items-center gap-1.5 min-w-0">
-              <Icon name="FolderOpen" size={13} className="text-stone-400 flex-shrink-0" />
-              <span className="truncate">{project.title}</span>
-              <IdentityBadge owner={project.owner} />
-            </p>
-            <div className="flex items-center gap-1 flex-shrink-0">
-              <button onClick={() => { setEditTitle(project.title); setEditOwner(project.owner); setIsEditing(true); }} className="text-stone-300 hover:text-stone-600 p-0.5"><Icon name="Pencil" size={12} /></button>
-              <DeleteConfirmButton onConfirm={() => onDeleteProject(project.id)} label="" className="text-stone-300 hover:text-rose-500 p-0.5" />
-            </div>
-          </div>
-        )}
-      <div className="space-y-1 ml-1">
-        {projTasks.map(t => (
-          <div key={t.id} className="flex items-center justify-between gap-2">
-            <button onClick={() => onOpenTask(t.id)} className="text-sm text-stone-600 truncate text-left hover:text-stone-900">{t.title}</button>
-            <TaskStatusPill status={t.status} onClick={() => cycleTask(t.id)} />
-          </div>
-        ))}
-        {projTasks.length === 0 && !adding && <p className="text-xs text-stone-300">尚無行動項目</p>}
-        {adding
-          ? <div className="flex gap-1 mt-1"><input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="新增行動項目..." className="flex-1 text-xs border border-stone-200 rounded-lg px-2 py-1" /><button onClick={submitAdd} className="text-xs bg-amber-500 text-white rounded-lg px-2">加入</button></div>
-          : <button onClick={() => setAdding(true)} className="text-xs text-amber-600 flex items-center gap-0.5 mt-1"><Icon name="Plus" size={11} />新增行動項目</button>}
-      </div>
-    </div>
-  );
-}
-
-function DreamDetailModal({ dream, projects, tasks, support, onClose, cycleTask, goToKanban, onAddSupportReceived, onAddSupportNeeded, onUpdateDream, onDeleteDream, onAddProject, onDeleteProject, onUpdateProject, onAddTask, openTask }) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [form, setForm] = useState({ title: dream.title, description: dream.description, why: dream.why, image: dream.image, owner: dream.owner, status: dream.status });
-  const [supportNote, setSupportNote] = useState('');
-  const [neededNote, setNeededNote] = useState('');
-  const [addingProject, setAddingProject] = useState(false);
-  const [newProjTitle, setNewProjTitle] = useState('');
-  const [newProjOwner, setNewProjOwner] = useState(dream.owner);
-  const dreamProjects = projects.filter(p => p.dreamId === dream.id);
-  const sup = support[dream.id] || { needed: [], received: [] };
-  const progress = getDreamProgress(dream.id, projects, tasks, [dream]);
-
-  function saveEdit() { if (!form.title.trim()) return; onUpdateDream(dream.id, { ...form, title: form.title.trim() }); setIsEditing(false); }
-  function submitRecv() { if (!supportNote.trim()) return; onAddSupportReceived(dream.id, supportNote.trim()); setSupportNote(''); }
-  function submitNeeded() { if (!neededNote.trim()) return; onAddSupportNeeded(dream.id, neededNote.trim()); setNeededNote(''); }
-  function submitProject() { if (!newProjTitle.trim()) return; onAddProject(dream.id, newProjTitle.trim(), newProjOwner); setNewProjTitle(''); setAddingProject(false); }
-
-  return (
-    <ModalShell onClose={onClose}>
-      <div className="relative">
-        <div className="rounded-t-3xl sm:rounded-t-2xl overflow-hidden h-52">
-          <DreamThumbnail image={isEditing ? form.image : dream.image} />
-        </div>
-        <button onClick={onClose} className="absolute top-3 right-3 bg-white/90 rounded-full p-1.5"><Icon name="X" size={16} /></button>
-      </div>
-      <div className="p-5">
-        {isEditing ? (
-          <div className="space-y-2 mb-4">
-            <input value={form.title} onChange={e => setForm({...form,title:e.target.value})} className="w-full text-base font-bold border border-stone-200 rounded-lg px-2.5 py-1.5" />
-            <div className="grid grid-cols-2 gap-2">
-              <IdentitySelect value={form.owner} onChange={v => setForm({...form,owner:v})} />
-              <select value={form.status} onChange={e => setForm({...form,status:e.target.value})} className="text-sm border border-stone-200 rounded-lg px-2 py-1.5">
-                {DREAM_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-            <textarea value={form.description} onChange={e => setForm({...form,description:e.target.value})} placeholder="描述" rows={2} className="w-full text-sm border border-stone-200 rounded-lg px-2.5 py-1.5" />
-            <textarea value={form.why} onChange={e => setForm({...form,why:e.target.value})} placeholder="為什麼這對你重要" rows={2} className="w-full text-sm border border-stone-200 rounded-lg px-2.5 py-1.5" />
-            <ImageUploadField value={form.image} onChange={v => setForm({...form,image:v})} />
-            <div className="flex gap-2">
-              <button onClick={saveEdit} className="flex-1 bg-amber-500 text-white text-sm font-medium rounded-lg py-2">儲存</button>
-              <button onClick={() => setIsEditing(false)} className="px-4 text-sm text-stone-400">取消</button>
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-1.5 flex-wrap"><IdentityBadge owner={dream.owner} size="md" /><DreamStatusPill status={dream.status} /></div>
-              <button onClick={() => { setForm({ title:dream.title, description:dream.description, why:dream.why, image:dream.image, owner:dream.owner, status:dream.status }); setIsEditing(true); }} className="text-stone-400 p-1"><Icon name="Pencil" size={15} /></button>
-            </div>
-            <h3 className="font-display text-xl font-bold text-stone-800 mb-2">{dream.title}</h3>
-            <ProgressBar value={progress} />
-            {dream.description && <p className="text-sm text-stone-600 mt-3 leading-relaxed">{dream.description}</p>}
-            {dream.why && <div className="mt-3 bg-amber-50 rounded-xl p-3"><p className="text-xs font-semibold text-amber-700 mb-1">為什麼這對我重要</p><p className="text-sm text-stone-700 leading-relaxed">{dream.why}</p></div>}
-          </>
-        )}
-
-        {!isEditing && (
-          <div className="mt-4">
-            <p className="text-xs font-semibold text-stone-500 mb-2 flex items-center gap-1"><Icon name="Heart" size={12} className="text-rose-400" />支持系統</p>
-            <div className="mb-3">
-              <p className="text-[11px] text-stone-400 mb-1">我希望伴侶如何支持我</p>
-              {sup.needed.length === 0 && <p className="text-xs text-stone-300 mb-1">尚未填寫</p>}
-              {sup.needed.map((n,i) => <p key={i} className="text-sm text-stone-700 flex items-start gap-1.5 mb-1"><Icon name="MessageCircle" size={13} className="text-purple-400 flex-shrink-0 mt-0.5" />{n}</p>)}
-              <div className="flex gap-2 mt-1.5"><input value={neededNote} onChange={e => setNeededNote(e.target.value)} placeholder="例如：陪我討論、給我回饋..." className="flex-1 text-sm border border-stone-200 rounded-lg px-2.5 py-1.5" /><button onClick={submitNeeded} className="px-3 bg-purple-500 text-white text-sm rounded-lg">加入</button></div>
-            </div>
-            <div>
-              <p className="text-[11px] text-stone-400 mb-1">已收到的支持</p>
-              {sup.received.length === 0 && <p className="text-xs text-stone-300 mb-1">尚未紀錄</p>}
-              {sup.received.map((n,i) => <p key={i} className="text-sm text-emerald-700 flex items-start gap-1.5 mb-1"><Icon name="CheckCircle2" size={13} className="text-emerald-500 flex-shrink-0 mt-0.5" />{n}</p>)}
-              <div className="flex gap-2 mt-1.5"><input value={supportNote} onChange={e => setSupportNote(e.target.value)} placeholder="記錄一個剛收到的支持..." className="flex-1 text-sm border border-stone-200 rounded-lg px-2.5 py-1.5" /><button onClick={submitRecv} className="px-3 bg-stone-800 text-white text-sm rounded-lg">加入</button></div>
-            </div>
-          </div>
-        )}
-
-        {!isEditing && (
-          <div className="mt-5">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-stone-500">夢想 → 專案 → 行動</p>
-              {!addingProject && <button onClick={() => setAddingProject(true)} className="text-xs text-amber-600 flex items-center gap-0.5"><Icon name="Plus" size={11} />新增專案</button>}
-            </div>
-            {addingProject && (
-              <div className="space-y-1.5 mb-3">
-                <input value={newProjTitle} onChange={e => setNewProjTitle(e.target.value)} placeholder="專案名稱..." className="w-full text-xs border border-stone-200 rounded-lg px-2 py-1.5" />
-                <div className="flex gap-2 items-center">
-                  <IdentitySelect value={newProjOwner} onChange={setNewProjOwner} />
-                  <button onClick={submitProject} className="text-xs bg-amber-500 text-white rounded-lg px-3 py-1.5">加入</button>
-                  <button onClick={() => setAddingProject(false)} className="text-xs text-stone-400">取消</button>
-                </div>
-              </div>
-            )}
-            <div className="border-l-2 border-dashed border-stone-200 pl-3 space-y-3">
-              {dreamProjects.map(p => (
-                <ProjectRow key={p.id} project={p} tasks={tasks} onAddTask={onAddTask} onDeleteProject={onDeleteProject} onUpdateProject={onUpdateProject} cycleTask={cycleTask} onOpenTask={id => { onClose(); openTask(id); }} />
-              ))}
-              {dreamProjects.length === 0 && !addingProject && <p className="text-xs text-stone-300">這個夢想還沒有展開成專案</p>}
-            </div>
-          </div>
-        )}
-
-        {!isEditing && (
-          <div className="mt-5 flex gap-2">
-            <button onClick={() => { goToKanban(dream.id); onClose(); }} className="flex-1 rounded-xl bg-stone-800 text-white text-sm font-medium py-2.5 flex items-center justify-center gap-1.5"><Icon name="LayoutGrid" size={14} />在看板中查看</button>
-            <DeleteConfirmButton onConfirm={() => { onDeleteDream(dream.id); onClose(); }} label="刪除夢想" className="border border-rose-200 text-rose-500 rounded-xl px-3 text-sm" />
-          </div>
-        )}
-      </div>
-    </ModalShell>
-  );
-}
-
-/* ================================================================
-   看板 Kanban
-   ================================================================ */
-
-function KanbanView({ dreams, projects, tasks, filterDreamId, setFilterDreamId, openTask, moveTask, onAddTask, goToDreams }) {
-  const [draggingId, setDraggingId] = useState(null);
-  const [newTitle, setNewTitle] = useState('');
-  const [newProjectId, setNewProjectId] = useState('');
-  const visibleProjects = filterDreamId === 'all' ? projects : projects.filter(p => p.dreamId === filterDreamId);
-  const vpIds = visibleProjects.map(p => p.id);
-  const visibleTasks = tasks.filter(t => vpIds.includes(t.projectId));
-  const filterDream = filterDreamId !== 'all' ? dreams.find(d => d.id === filterDreamId) : null;
-  function handleDrop(status) { if (draggingId) { moveTask(draggingId, status); setDraggingId(null); } }
-  function submitAdd() {
-    const pid = (newProjectId && projects.find(p => p.id === newProjectId)) ? newProjectId : (projects[0]?.id || '');
-    if (!newTitle.trim() || !pid) return;
-    onAddTask(pid, newTitle.trim()); setNewTitle('');
-  }
-  return (
-    <div className="pb-6">
-      <SectionTitle icon={<Icon name="LayoutGrid" size={16} className="text-amber-500" />} title="專案與待辦看板" subtitle="拖曳或點「推進」" />
-      {dreams.length > 0 && (
-        <div className="mb-3">
-          <select value={filterDreamId} onChange={e => setFilterDreamId(e.target.value)} className="text-sm border border-stone-200 rounded-lg px-2.5 py-1.5 bg-white w-full">
-            <option value="all">全部夢想</option>
-            {dreams.map(d => <option key={d.id} value={d.id}>{d.title}</option>)}
-          </select>
-        </div>
-      )}
-      {filterDream && <div className="mb-3 bg-amber-50 rounded-xl px-3 py-2"><DreamTrail dream={filterDream} /></div>}
-      {projects.length === 0
-        ? <EmptyState iconName="LayoutGrid" title="還沒有任何待辦事項" subtitle="先到夢想地圖建立一個夢想，再從裡面新增專案" action={<button onClick={goToDreams} className="bg-amber-500 text-white text-sm font-medium rounded-lg px-4 py-2 flex items-center gap-1"><Icon name="Sparkles" size={14} />前往夢想地圖</button>} />
-        : (
-          <>
-            <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2" style={{ scrollSnapType:'x mandatory' }}>
-              {TASK_STATUSES.map(status => {
-                const colTasks = visibleTasks.filter(t => t.status === status);
+        {/* Today todos */}
+        {(todayTodos.length>0||doingTodos.length>0) && (
+          <div style={{marginBottom:22}}>
+            <p style={{fontSize:11,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:10}}>今日待辦</p>
+            <div style={{display:'flex',flexDirection:'column',gap:7}}>
+              {[...todayTodos,...doingTodos.filter(a=>!todayTodos.find(b=>b.id===a.id))].slice(0,5).map(a=>{
+                const sc=STATUS_COLOR[a.status];
                 return (
-                  <div key={status} onDragOver={e => e.preventDefault()} onDrop={() => handleDrop(status)}
-                    className={`w-72 flex-shrink-0 bg-white rounded-2xl border-t-4 ${TASK_STATUS_STYLES[status].col} border border-stone-200 p-2.5`} style={{ scrollSnapAlign:'start' }}>
-                    <div className="flex items-center justify-between mb-2 px-1">
-                      <span className="text-sm font-semibold text-stone-700">{status}</span>
-                      <span className="text-xs text-stone-400">{colTasks.length}</span>
+                  <div key={a.id} className="card" style={{padding:'11px 14px',display:'flex',alignItems:'center',gap:10}}>
+                    <div style={{width:7,height:7,borderRadius:'50%',background:sc.text,flexShrink:0}}></div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <p style={{fontSize:13,color:'#2D2820',fontWeight:500}}>{a.title}</p>
+                      <p style={{fontSize:11,color:'#A09688',marginTop:1}}>{a.domainTitle} › {a.projectTitle}</p>
                     </div>
-                    <div className="space-y-2">
-                      {colTasks.map(t => {
-                        const { project, dream } = getBreadcrumb(t, projects, dreams);
-                        return (
-                          <div key={t.id} draggable onDragStart={() => setDraggingId(t.id)} onClick={() => openTask(t.id)} className="rounded-xl border border-stone-200 p-2.5 bg-stone-50 cursor-pointer">
-                            <div className="flex items-start justify-between gap-1">
-                              <p className="text-sm font-medium text-stone-800 leading-snug">{t.title}</p>
-                              <Icon name="GripVertical" size={13} className="text-stone-300 flex-shrink-0 mt-0.5" />
-                            </div>
-                            <DreamTrail dream={dream} project={project} />
-                            <div className="flex items-center justify-between mt-2">
-                              <IdentityBadge owner={t.owner} />
-                              {t.dueDate && <span className="text-[10px] text-stone-400 flex items-center gap-0.5"><Icon name="Clock" size={10} />{t.dueDate.slice(5)}</span>}
-                            </div>
-                            {status !== '已完成' && (
-                              <button onClick={e => { e.stopPropagation(); moveTask(t.id, nextTaskStatus(t.status)); }}
-                                className="mt-2 w-full text-[11px] text-amber-600 font-medium border border-amber-200 bg-amber-50 rounded-lg py-1 flex items-center justify-center gap-1">
-                                推進到下一步 <Icon name="ArrowRight" size={11} />
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                      {colTasks.length === 0 && <p className="text-xs text-stone-300 text-center py-4">沒有項目</p>}
+                    <span style={{fontSize:11,padding:'2px 8px',borderRadius:10,background:sc.bg,color:sc.text,border:`1px solid ${sc.border}`,flexShrink:0}}>{STATUS_LABEL[a.status]}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <button onClick={()=>setPage('projects')} style={{marginTop:8,fontSize:12,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>查看全部專案 →</button>
+          </div>
+        )}
+
+        {/* Today events */}
+        {todayEvs.length>0 && (
+          <div style={{marginBottom:22}}>
+            <p style={{fontSize:11,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:10}}>今日行程</p>
+            <div style={{display:'flex',flexDirection:'column',gap:7}}>
+              {todayEvs.map(e=>{
+                const owner=PEOPLE[e.owner]||PEOPLE.us;
+                return (
+                  <div key={e.id} className="card" style={{padding:'11px 14px',display:'flex',alignItems:'center',gap:10}}>
+                    <span style={{width:7,height:7,borderRadius:'50%',background:owner.color,flexShrink:0}}></span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <p style={{fontSize:13,color:'#2D2820',fontWeight:500}}>{e.title}</p>
+                      <p style={{fontSize:11,color:'#A09688',marginTop:1}}>{e.time&&`${e.time} · `}{owner.name}</p>
+                    </div>
+                    {e.stress==='high'&&<span style={{fontSize:10,color:'#C0887A',padding:'2px 8px',borderRadius:10,background:'rgba(192,136,122,.1)',border:'1px solid rgba(192,136,122,.3)'}}>高壓</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Upcoming */}
+        {upcomingEvs.length>0 && (
+          <div>
+            <p style={{fontSize:11,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:10}}>即將到來</p>
+            <div style={{display:'flex',flexDirection:'column',gap:7}}>
+              {upcomingEvs.map(e=>{
+                const owner=PEOPLE[e.owner]||PEOPLE.us;
+                const [,mm,dd]=e.date.split('-');
+                return (
+                  <div key={e.id} className="card" style={{padding:'11px 14px',display:'flex',alignItems:'center',gap:12}}>
+                    <div style={{width:38,height:38,borderRadius:9,background:'rgba(45,74,62,.08)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                      <span style={{fontSize:9,color:'#A09688'}}>{mm}月</span>
+                      <span style={{fontSize:14,fontWeight:600,color:'#2D4A3E',lineHeight:1}}>{dd}</span>
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <p style={{fontSize:13,color:'#2D2820',fontWeight:500}}>{e.title}</p>
+                      <p style={{fontSize:11,color:'#A09688',marginTop:1}}>{owner.name}{e.tags?.length?' · '+e.tags.join(' · '):''}</p>
                     </div>
                   </div>
                 );
               })}
             </div>
-            <div className="mt-4 rounded-xl border border-dashed border-stone-300 p-3 space-y-2">
-              <p className="text-xs font-semibold text-stone-500 flex items-center gap-1"><Icon name="Plus" size={12} />快速新增待辦</p>
-              <input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="新的行動項目..." className="w-full text-sm border border-stone-200 rounded-lg px-2.5 py-1.5" />
-              <div className="flex gap-2">
-                <select value={newProjectId || (projects[0]?.id||'')} onChange={e => setNewProjectId(e.target.value)} className="flex-1 text-sm border border-stone-200 rounded-lg px-2.5 py-1.5">
-                  {projects.map(p => { const d = dreams.find(d => d.id === p.dreamId); return <option key={p.id} value={p.id}>{d ? d.title+' / ' : ''}{p.title}</option>; })}
-                </select>
-                <button onClick={submitAdd} className="px-4 bg-amber-500 text-white text-sm font-medium rounded-lg">新增</button>
-              </div>
-            </div>
-          </>
-        )}
-    </div>
-  );
-}
-
-function TaskDetailModal({ task, project, dream, onClose, setStatus, onUpdateTask, onDeleteTask }) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [form, setForm] = useState({ title: task.title, description: task.description, dueDate: task.dueDate, owner: task.owner, supporters: task.supporters });
-  function saveEdit() { if (!form.title.trim()) return; onUpdateTask(task.id, { ...form, title: form.title.trim() }); setIsEditing(false); }
-  function toggleSupporter(key) { setForm(f => ({ ...f, supporters: f.supporters.includes(key) ? f.supporters.filter(s=>s!==key) : [...f.supporters, key] })); }
-  return (
-    <ModalShell onClose={onClose}>
-      <div className="p-5">
-        <div className="flex items-center justify-between mb-3">
-          <DreamTrail dream={dream} project={project} task={task} />
-          <button onClick={onClose} className="text-stone-400 flex-shrink-0 ml-2"><Icon name="X" size={20} /></button>
-        </div>
-        {isEditing ? (
-          <div className="space-y-2 mb-4">
-            <input value={form.title} onChange={e => setForm({...form,title:e.target.value})} className="w-full text-base font-bold border border-stone-200 rounded-lg px-2.5 py-1.5" />
-            <textarea value={form.description} onChange={e => setForm({...form,description:e.target.value})} placeholder="描述" rows={2} className="w-full text-sm border border-stone-200 rounded-lg px-2.5 py-1.5" />
-            <div className="grid grid-cols-2 gap-2">
-              <input type="date" value={form.dueDate} onChange={e => setForm({...form,dueDate:e.target.value})} className="text-sm border border-stone-200 rounded-lg px-2.5 py-1.5" />
-              <IdentitySelect value={form.owner} onChange={v => setForm({...form,owner:v})} />
-            </div>
-            <div>
-              <p className="text-[11px] text-stone-400 mb-1">支援者</p>
-              <div className="flex gap-2">
-                {['apple','pine'].map(key => (
-                  <button key={key} type="button" onClick={() => toggleSupporter(key)}
-                    className={`text-xs rounded-lg px-2.5 py-1.5 border ${form.supporters.includes(key) ? 'bg-stone-800 text-white border-stone-800' : 'border-stone-200 text-stone-500'}`}>
-                    {OWNERS[key].name}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={saveEdit} className="flex-1 bg-amber-500 text-white text-sm font-medium rounded-lg py-2">儲存</button>
-              <button onClick={() => setIsEditing(false)} className="px-4 text-sm text-stone-400">取消</button>
-            </div>
           </div>
-        ) : (
-          <>
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <h3 className="font-display text-lg font-bold text-stone-800">{task.title}</h3>
-              <button onClick={() => { setForm({ title:task.title, description:task.description, dueDate:task.dueDate, owner:task.owner, supporters:task.supporters }); setIsEditing(true); }} className="text-stone-400 p-1 flex-shrink-0"><Icon name="Pencil" size={15} /></button>
-            </div>
-            {task.description && <p className="text-sm text-stone-600 mb-3 leading-relaxed">{task.description}</p>}
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div><p className="text-[11px] text-stone-400 mb-1">負責人</p><IdentityBadge owner={task.owner} size="md" /></div>
-              <div><p className="text-[11px] text-stone-400 mb-1">截止日期</p><p className="text-sm text-stone-700 flex items-center gap-1"><Icon name="Clock" size={12} />{task.dueDate || '未設定'}</p></div>
-            </div>
-            {task.supporters.length > 0 && <div className="mb-4"><p className="text-[11px] text-stone-400 mb-1">支援者</p><div className="flex gap-1 flex-wrap">{task.supporters.map(s => <IdentityBadge key={s} owner={s} />)}</div></div>}
-            <p className="text-[11px] text-stone-400 mb-1.5">狀態</p>
-            <div className="flex gap-2 mb-4">
-              {TASK_STATUSES.map(st => (
-                <button key={st} onClick={() => setStatus(task.id, st)}
-                  className={`flex-1 text-xs font-medium rounded-lg py-2 border ${task.status === st ? TASK_STATUS_STYLES[st].pill : 'border-stone-200 text-stone-400 bg-white'}`}>
-                  {st}
-                </button>
-              ))}
-            </div>
-            <DeleteConfirmButton onConfirm={() => { onDeleteTask(task.id); onClose(); }} label="刪除任務" className="border border-rose-200 text-rose-500 rounded-xl px-3 py-2 text-sm w-full justify-center" />
-          </>
+        )}
+
+        {todayEvs.length===0&&upcomingEvs.length===0&&todayTodos.length===0&&doingTodos.length===0&&(
+          <div style={{textAlign:'center',padding:'48px 0',color:'#C0B8AE'}}>
+            <p style={{fontSize:32,marginBottom:10}}>✦</p>
+            <p style={{fontFamily:"'Noto Serif TC',serif",fontSize:14}}>今天還是空白的</p>
+            <p style={{fontSize:12,marginTop:8}}>去月曆加入行程，或到夢想地圖展開計畫</p>
+          </div>
         )}
       </div>
-    </ModalShell>
-  );
-}
-
-/* ================================================================
-   回憶牆
-   ================================================================ */
-
-function MemoryWallView({ tasks, projects, dreams }) {
-  const completed = [...tasks].filter(t => t.status === '已完成').sort((a,b) => (b.dueDate||'').localeCompare(a.dueDate||''));
-  return (
-    <div className="pb-6">
-      <SectionTitle icon={<Icon name="Camera" size={16} className="text-amber-500" />} title="完成成果與回憶牆" subtitle="我們一起完成的人生紀錄，不會消失" />
-      {completed.length === 0
-        ? <EmptyState iconName="Camera" title="這裡還沒有回憶" subtitle="完成的事項會自動出現在這裡" />
-        : (
-          <div className="grid grid-cols-2 gap-3">
-            {completed.map(t => {
-              const { project, dream } = getBreadcrumb(t, projects, dreams);
-              return (
-                <div key={t.id} className="bg-white rounded-2xl border border-stone-100 p-2 shadow-sm relative">
-                  <div className="absolute -top-2 -right-2 bg-emerald-500 text-white rounded-full w-7 h-7 flex items-center justify-center" style={{ transform:'rotate(8deg)' }}>
-                    <Icon name="CheckCircle2" size={14} />
-                  </div>
-                  <div className="rounded-xl overflow-hidden h-24 mb-2"><DreamThumbnail image={dream?.image || ''} /></div>
-                  <p className="text-xs font-semibold text-stone-800 leading-snug mb-1">{t.title}</p>
-                  <DreamTrail dream={dream} project={project} />
-                  <div className="flex items-center justify-between mt-2">
-                    <IdentityBadge owner={t.owner} />
-                    {t.dueDate && <span className="text-[10px] text-stone-400">完成於 {t.dueDate}</span>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
     </div>
   );
 }
 
-/* ================================================================
-   設定畫面（尚未設定 Apps Script URL 時顯示）
-   ================================================================ */
+/* ════════════════════════════════════════════════════════
+   CALENDAR PAGE
+════════════════════════════════════════════════════════ */
+function CalendarPage({ calEvents, setCalEvents }) {
+  const now = new Date();
+  const [year, setYear]   = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth());
+  const [selDay, setSelDay] = useState(null);
 
+  function changeMonth(d) { let m=month+d,y=year; if(m<0){m=11;y--;} if(m>11){m=0;y++;} setMonth(m);setYear(y); }
+  const cells = monthGrid(year,month);
+  const today = todayKey();
+
+  return (
+    <div className="page-scroll">
+      <div style={{padding:'24px 24px 40px',maxWidth:560,margin:'0 auto'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:22}}>
+          <button onClick={()=>changeMonth(-1)} style={{background:'none',border:'1.5px solid #E0D9CF',borderRadius:9,padding:'6px 12px',cursor:'pointer',color:'#7D7468',fontSize:16}}>‹</button>
+          <h2 style={{fontFamily:"'Noto Serif TC',serif",fontSize:18,fontWeight:400,color:'#2D2820'}}>{year} 年 {MONTHS[month]}</h2>
+          <button onClick={()=>changeMonth(1)} style={{background:'none',border:'1.5px solid #E0D9CF',borderRadius:9,padding:'6px 12px',cursor:'pointer',color:'#7D7468',fontSize:16}}>›</button>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',textAlign:'center',marginBottom:6}}>
+          {DAYS.map(d=><div key={d} style={{fontSize:11,color:'#A09688',padding:'3px 0'}}>{d}</div>)}
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:3}}>
+          {cells.map((day,i)=>{
+            if(!day) return <div key={i}></div>;
+            const dk=toKey(year,month,day);
+            const evs=calEvents.filter(e=>e.date===dk);
+            const isToday=dk===today;
+            return (
+              <button key={i} onClick={()=>setSelDay(dk)} style={{aspectRatio:'1',borderRadius:9,border:`1.5px solid ${isToday?'#2D4A3E':'rgba(180,172,160,.35)'}`,background:isToday?'rgba(45,74,62,.06)':'rgba(255,255,255,.7)',display:'flex',flexDirection:'column',alignItems:'center',padding:'5px 2px',cursor:'pointer',transition:'all .15s'}}>
+                <span style={{fontSize:12,fontWeight:isToday?600:400,color:isToday?'#2D4A3E':'#3D3830'}}>{day}</span>
+                <div style={{display:'flex',gap:2,marginTop:2,flexWrap:'wrap',justifyContent:'center'}}>
+                  {evs.slice(0,3).map(e=>{const p=PEOPLE[e.owner]||PEOPLE.us;return<span key={e.id} style={{width:5,height:5,borderRadius:'50%',background:p.color,display:'inline-block'}}></span>;})}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        <div style={{marginTop:18,display:'flex',gap:14,flexWrap:'wrap'}}>
+          {[APPLE,PINE,US].map(p=><span key={p.key} style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'#A09688'}}><span style={{width:7,height:7,borderRadius:'50%',background:p.color,display:'inline-block'}}></span>{p.name}</span>)}
+        </div>
+      </div>
+      {selDay&&<DayModal dateKey={selDay} events={calEvents} setEvents={setCalEvents} onClose={()=>setSelDay(null)} />}
+    </div>
+  );
+}
+
+function DayModal({ dateKey, events, setEvents, onClose }) {
+  const [title,setTitle]=useState('');
+  const [time,setTime]=useState('19:00');
+  const [owner,setOwner]=useState('us');
+  const [stress,setStress]=useState('normal');
+  const [tags,setTags]=useState('');
+  const [showForm,setShowForm]=useState(false);
+  const dayEvs=events.filter(e=>e.date===dateKey).sort((a,b)=>a.time.localeCompare(b.time));
+  function submit(){
+    if(!title.trim()) return;
+    setEvents(p=>[...p,{id:uid(),date:dateKey,time,title:title.trim(),owner,stress,tags:tags.split(',').map(t=>t.trim()).filter(Boolean),note:''}]);
+    setTitle('');setTags('');setShowForm(false);
+  }
+  return (
+    <div onClick={onClose} style={{position:'fixed',inset:0,zIndex:100,background:'rgba(45,40,35,.22)',backdropFilter:'blur(6px)',display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:'#FDFAF5',borderRadius:'20px 20px 0 0',padding:'22px',width:'100%',maxWidth:460,maxHeight:'80vh',overflowY:'auto',animation:'dialogIn .2s both'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18}}>
+          <h3 style={{fontSize:15,fontWeight:500,color:'#2D2820'}}>{dateKey}</h3>
+          <button onClick={onClose} style={{background:'none',border:'none',fontSize:18,color:'#A09688',cursor:'pointer'}}>×</button>
+        </div>
+        {dayEvs.length===0&&!showForm&&<p style={{fontSize:13,color:'#C0B8AE',textAlign:'center',padding:'16px 0'}}>這天還沒有事件</p>}
+        <div style={{display:'flex',flexDirection:'column',gap:7,marginBottom:14}}>
+          {dayEvs.map(e=>{const p=PEOPLE[e.owner]||PEOPLE.us;return(
+            <div key={e.id} style={{background:'rgba(255,255,255,.8)',border:'1.5px solid #E0D9CF',borderRadius:11,padding:'11px 13px',display:'flex',gap:8}}>
+              <span style={{width:7,height:7,borderRadius:'50%',background:p.color,flexShrink:0,marginTop:5}}></span>
+              <div style={{flex:1}}>
+                <p style={{fontSize:13,fontWeight:500,color:'#2D2820'}}>{e.title}</p>
+                <p style={{fontSize:11,color:'#A09688',marginTop:2}}>{e.time} · {p.name}{e.stress==='high'?' · 🔴 高壓':''}{e.tags?.length?' · '+e.tags.join('、'):''}</p>
+              </div>
+              <button onClick={()=>setEvents(prev=>prev.filter(x=>x.id!==e.id))} style={{background:'none',border:'none',fontSize:14,color:'#C8C0B4',cursor:'pointer',flexShrink:0}}>×</button>
+            </div>
+          );})}
+        </div>
+        {!showForm
+          ? <button onClick={()=>setShowForm(true)} style={{width:'100%',background:'none',border:'1.5px dashed #D8D0C4',borderRadius:11,padding:'11px',fontSize:13,color:'#A09688',cursor:'pointer'}}>＋ 新增事件</button>
+          : (
+            <div style={{border:'1.5px solid #E0D9CF',borderRadius:11,padding:14,display:'flex',flexDirection:'column',gap:9}}>
+              <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="事件標題" />
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9}}>
+                <input type="time" value={time} onChange={e=>setTime(e.target.value)} />
+                <select value={owner} onChange={e=>setOwner(e.target.value)}>
+                  <option value="apple">🍎 蘋果派</option>
+                  <option value="pine">🌲 松果</option>
+                  <option value="us">🤝 我們</option>
+                </select>
+              </div>
+              <select value={stress} onChange={e=>setStress(e.target.value)}>
+                <option value="normal">一般</option>
+                <option value="high">🔴 高壓日</option>
+              </select>
+              <input value={tags} onChange={e=>setTags(e.target.value)} placeholder="標籤（逗號分隔，如：出差,不回家,約會）" />
+              <div style={{display:'flex',gap:8}}>
+                <button onClick={submit} className="btn-primary" style={{flex:1}}>儲存</button>
+                <button onClick={()=>setShowForm(false)} className="btn-ghost">取消</button>
+              </div>
+            </div>
+          )}
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════
+   PROJECTS PAGE
+════════════════════════════════════════════════════════ */
+function ProjectsPage({ demData, setDemData }) {
+  const [filterDomain, setFilterDomain]     = useState('all');
+  const [filterAssignee, setFilterAssignee] = useState('all');
+  const [filterStatus, setFilterStatus]     = useState('todo,doing');
+  const [editAction, setEditAction]         = useState(null);
+
+  const allActions = useMemo(()=>{
+    const r=[];
+    demData.domains.forEach(dom=>{
+      if(filterDomain!=='all'&&dom.id!==filterDomain) return;
+      (demData.projects[dom.id]||[]).forEach(proj=>{
+        (demData.actions[proj.id]||[]).forEach(a=>{
+          r.push({...a,domainId:dom.id,domainTitle:dom.title,projectId:proj.id,projectTitle:proj.title});
+        });
+      });
+    });
+    return r;
+  },[demData,filterDomain]);
+
+  const statuses = filterStatus.split(',');
+  const filtered = allActions.filter(a=>{
+    if(filterAssignee!=='all'&&a.assignee!==filterAssignee) return false;
+    return statuses.includes(a.status);
+  });
+
+  function updateAction(projectId, updated) {
+    setDemData(d=>({...d,actions:{...d.actions,[projectId]:(d.actions[projectId]||[]).map(a=>a.id===updated.id?updated:a)}}));
+  }
+
+  return (
+    <div className="page-scroll">
+      <div style={{padding:'24px 24px 40px',maxWidth:680,margin:'0 auto'}}>
+        <h2 style={{fontFamily:"'Noto Serif TC',serif",fontSize:19,fontWeight:400,color:'#2D2820',marginBottom:16}}>專案 & 行動</h2>
+        <div style={{display:'flex',flexWrap:'wrap',gap:7,marginBottom:10}}>
+          <select value={filterDomain} onChange={e=>setFilterDomain(e.target.value)} style={{fontSize:12,padding:'6px 10px',borderRadius:9,border:'1.5px solid #E0D9CF',background:'#FFF',cursor:'pointer'}}>
+            <option value="all">所有領域</option>
+            {demData.domains.map(d=><option key={d.id} value={d.id}>{d.title}</option>)}
+          </select>
+          <select value={filterAssignee} onChange={e=>setFilterAssignee(e.target.value)} style={{fontSize:12,padding:'6px 10px',borderRadius:9,border:'1.5px solid #E0D9CF',background:'#FFF',cursor:'pointer'}}>
+            <option value="all">所有人</option>
+            <option value="apple">🍎 蘋果派</option>
+            <option value="pine">🌲 松果</option>
+            <option value="us">🤝 我們</option>
+          </select>
+          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{fontSize:12,padding:'6px 10px',borderRadius:9,border:'1.5px solid #E0D9CF',background:'#FFF',cursor:'pointer'}}>
+            <option value="todo,doing">待開始 & 進行中</option>
+            <option value="todo">待開始</option>
+            <option value="doing">進行中</option>
+            <option value="done">已完成</option>
+            <option value="todo,doing,done">全部</option>
+          </select>
+        </div>
+        <p style={{fontSize:11,color:'#A09688',marginBottom:14}}>共 {filtered.length} 個行動項目</p>
+        <div style={{display:'flex',flexDirection:'column',gap:9}}>
+          {filtered.length===0&&<div style={{textAlign:'center',padding:'40px 0',color:'#C0B8AE',fontSize:13}}>這個條件下沒有項目</div>}
+          {filtered.map(a=>{
+            const asn=PEOPLE[a.assignee]||PEOPLE.us;
+            const sc=STATUS_COLOR[a.status];
+            return (
+              <div key={a.id} className="card" style={{padding:'13px 15px'}}>
+                <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <p style={{fontSize:13,fontWeight:500,color:'#2D2820',marginBottom:2}}>{a.title}</p>
+                    <p style={{fontSize:11,color:'#A09688'}}>{a.domainTitle} › {a.projectTitle}</p>
+                    {a.desc&&<p style={{fontSize:12,color:'#7D7468',marginTop:4,lineHeight:1.6}}>{a.desc}</p>}
+                  </div>
+                  <span style={{fontSize:11,padding:'3px 9px',borderRadius:9,background:sc.bg,color:sc.text,border:`1px solid ${sc.border}`,flexShrink:0}}>{STATUS_LABEL[a.status]}</span>
+                </div>
+                <div style={{display:'flex',alignItems:'center',gap:7,marginTop:10,flexWrap:'wrap'}}>
+                  <span style={{display:'flex',alignItems:'center',gap:4,fontSize:11,color:'#A09688'}}><span style={{width:5,height:5,borderRadius:'50%',background:asn.color,display:'inline-block'}}></span>{asn.name}</span>
+                  {a.dueDate&&<span style={{fontSize:11,color:'#A09688'}}>· {a.dueDate}</span>}
+                  <div style={{marginLeft:'auto',display:'flex',gap:5}}>
+                    {a.status==='todo'&&<button onClick={()=>updateAction(a.projectId,{...a,status:'doing'})} style={{fontSize:11,padding:'3px 9px',borderRadius:7,border:'1px solid #E0D9CF',background:'none',color:'#7D7468',cursor:'pointer'}}>開始</button>}
+                    {a.status!=='done'&&<button onClick={()=>updateAction(a.projectId,{...a,status:'done',completedAt:todayKey()})} style={{fontSize:11,padding:'3px 9px',borderRadius:7,border:'1px solid rgba(45,74,62,.3)',background:'rgba(45,74,62,.08)',color:'#2D4A3E',cursor:'pointer'}}>完成 ✓</button>}
+                    {a.status==='done'&&<button onClick={()=>updateAction(a.projectId,{...a,status:'todo',completedAt:null})} style={{fontSize:11,padding:'3px 9px',borderRadius:7,border:'1px solid #E0D9CF',background:'none',color:'#A09688',cursor:'pointer'}}>重新開啟</button>}
+                    <button onClick={()=>setEditAction(a)} style={{fontSize:11,padding:'3px 9px',borderRadius:7,border:'1px solid #E0D9CF',background:'none',color:'#A09688',cursor:'pointer'}}>編輯</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {editAction&&(
+        <ActionEditModal action={editAction}
+          onSave={a=>{updateAction(a.projectId,{...a,completedAt:a.status==='done'?(a.completedAt||todayKey()):null});setEditAction(null);}}
+          onClose={()=>setEditAction(null)} />
+      )}
+    </div>
+  );
+}
+
+function ActionEditModal({ action, onSave, onClose }) {
+  const [form,setForm]=useState({...action});
+  return (
+    <div onClick={onClose} style={{position:'fixed',inset:0,zIndex:100,background:'rgba(45,40,35,.22)',backdropFilter:'blur(6px)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:'#FDFAF5',borderRadius:18,padding:'24px',width:'100%',maxWidth:380,animation:'dialogIn .2s both'}}>
+        <h3 style={{fontSize:14,fontWeight:500,color:'#2D2820',marginBottom:16}}>編輯行動</h3>
+        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+          <input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="標題" />
+          <textarea value={form.desc||''} onChange={e=>setForm({...form,desc:e.target.value})} placeholder="描述（選填）" rows={2} />
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9}}>
+            <select value={form.assignee||'us'} onChange={e=>setForm({...form,assignee:e.target.value})}>
+              <option value="apple">🍎 蘋果派</option>
+              <option value="pine">🌲 松果</option>
+              <option value="us">🤝 我們</option>
+            </select>
+            <input type="date" value={form.dueDate||''} onChange={e=>setForm({...form,dueDate:e.target.value})} />
+          </div>
+          <select value={form.status||'todo'} onChange={e=>setForm({...form,status:e.target.value})}>
+            <option value="todo">待開始</option>
+            <option value="doing">進行中</option>
+            <option value="done">已完成</option>
+          </select>
+        </div>
+        <div style={{display:'flex',gap:8,marginTop:16,justifyContent:'flex-end'}}>
+          <button onClick={onClose} className="btn-ghost" style={{padding:'7px 14px',fontSize:12}}>取消</button>
+          <button onClick={()=>onSave(form)} className="btn-primary" style={{padding:'7px 16px',fontSize:12}}>儲存</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════
+   MEMORY WALL (Completed)
+════════════════════════════════════════════════════════ */
+function MemoriesPage({ demData }) {
+  const completed = useMemo(()=>{
+    const r=[];
+    demData.domains.forEach(dom=>{
+      (demData.projects[dom.id]||[]).forEach(proj=>{
+        (demData.actions[proj.id]||[]).forEach(a=>{
+          if(a.status==='done') r.push({...a,domainTitle:dom.title,projectTitle:proj.title,domainImage:dom.image,projectImage:proj.image});
+        });
+      });
+    });
+    return r.sort((a,b)=>(b.completedAt||'').localeCompare(a.completedAt||''));
+  },[demData]);
+
+  const [imgFailed, setImgFailed] = useState({});
+
+  if(completed.length===0) return (
+    <div className="page-scroll" style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100%'}}>
+      <div style={{textAlign:'center',color:'#C0B8AE',padding:40}}>
+        <p style={{fontSize:32,marginBottom:10}}>📸</p>
+        <p style={{fontFamily:"'Noto Serif TC',serif",fontSize:15,marginBottom:8}}>回憶牆還是空的</p>
+        <p style={{fontSize:12}}>完成的行動項目會在這裡累積，永遠不消失</p>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="page-scroll">
+      <div style={{padding:'24px 24px 40px',maxWidth:680,margin:'0 auto'}}>
+        <div style={{marginBottom:22}}>
+          <h2 style={{fontFamily:"'Noto Serif TC',serif",fontSize:19,fontWeight:400,color:'#2D2820',marginBottom:3}}>回憶牆</h2>
+          <p style={{fontSize:12,color:'#A09688'}}>共完成 {completed.length} 件事 · 永遠留在這裡</p>
+        </div>
+        <div style={{columns:2,gap:12}}>
+          {completed.map(a=>{
+            const asn=PEOPLE[a.assignee]||PEOPLE.us;
+            const img = a.image || a.projectImage || a.domainImage;
+            const failed = imgFailed[a.id];
+            return (
+              <div key={a.id} className="card" style={{marginBottom:12,breakInside:'avoid',overflow:'hidden'}}>
+                {img&&!failed&&(
+                  <div style={{height:100,overflow:'hidden'}}>
+                    <img src={img} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}} onError={()=>setImgFailed(prev=>({...prev,[a.id]:true}))} />
+                  </div>
+                )}
+                <div style={{padding:'11px 13px'}}>
+                  <p style={{fontSize:12,fontWeight:500,color:'#2D2820',marginBottom:3}}>{a.title}</p>
+                  <p style={{fontSize:10,color:'#A09688',marginBottom:6}}>{a.domainTitle} › {a.projectTitle}</p>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                    <span style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:'#A09688'}}><span style={{width:5,height:5,borderRadius:'50%',background:asn.color,display:'inline-block'}}></span>{asn.name}</span>
+                    {a.completedAt&&<span style={{fontSize:10,color:'#C0B8AE'}}>{a.completedAt}</span>}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════
+   REVIEW PAGE (Timeline)
+════════════════════════════════════════════════════════ */
+function ReviewPage({ demData, calEvents }) {
+  const items = useMemo(()=>{
+    const r=[];
+    demData.domains.forEach(dom=>{
+      (demData.projects[dom.id]||[]).forEach(proj=>{
+        (demData.actions[proj.id]||[]).forEach(a=>{
+          if(a.status==='done') r.push({...a,domainTitle:dom.title,projectTitle:proj.title,type:'action',date:a.completedAt||''});
+        });
+      });
+    });
+    calEvents.forEach(e=>r.push({...e,type:'event'}));
+    return r;
+  },[demData,calEvents]);
+
+  const byMonth = useMemo(()=>{
+    const map={};
+    items.forEach(item=>{ if(!item.date) return; const k=item.date.slice(0,7); if(!map[k]) map[k]=[]; map[k].push(item); });
+    return Object.entries(map).sort((a,b)=>b[0].localeCompare(a[0]));
+  },[items]);
+
+  if(byMonth.length===0) return (
+    <div className="page-scroll" style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100%'}}>
+      <div style={{textAlign:'center',color:'#C0B8AE',padding:40}}>
+        <p style={{fontSize:32,marginBottom:10}}>📖</p>
+        <p style={{fontFamily:"'Noto Serif TC',serif",fontSize:15,marginBottom:8}}>人生時間軸還是空的</p>
+        <p style={{fontSize:12}}>完成的事項和月曆事件，會在這裡形成你們的共同故事</p>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="page-scroll">
+      <div style={{padding:'24px 24px 40px',maxWidth:640,margin:'0 auto'}}>
+        <h2 style={{fontFamily:"'Noto Serif TC',serif",fontSize:19,fontWeight:400,color:'#2D2820',marginBottom:24}}>生活回顧</h2>
+        {byMonth.map(([mk,mitems])=>{
+          const [y,m]=mk.split('-');
+          return (
+            <div key={mk} style={{marginBottom:28}}>
+              <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:12}}>
+                <div style={{width:36,height:36,borderRadius:'50%',background:'#2D4A3E',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                  <span style={{fontSize:10,color:'#F8F6F1',fontFamily:"'Noto Serif TC',serif"}}>{parseInt(m)}</span>
+                </div>
+                <p style={{fontFamily:"'Noto Serif TC',serif",fontSize:15,color:'#2D2820'}}>{y} 年 {MONTHS[parseInt(m)-1]}</p>
+              </div>
+              <div style={{marginLeft:18,borderLeft:'1px dashed #D8D0C4',paddingLeft:24,display:'flex',flexDirection:'column',gap:7}}>
+                {mitems.map((item,i)=>{
+                  if(item.type==='action') return (
+                    <div key={item.id+i} style={{position:'relative'}}>
+                      <div style={{position:'absolute',left:-28,top:8,width:7,height:7,borderRadius:'50%',background:'#2D4A3E',border:'2px solid #F8F6F1',boxShadow:'0 0 0 1px #2D4A3E'}}></div>
+                      <div className="card" style={{padding:'10px 13px'}}>
+                        <p style={{fontSize:13,fontWeight:500,color:'#2D2820'}}>✓ {item.title}</p>
+                        <p style={{fontSize:11,color:'#A09688',marginTop:2}}>{item.domainTitle} › {item.projectTitle}</p>
+                      </div>
+                    </div>
+                  );
+                  const owner=PEOPLE[item.owner]||PEOPLE.us;
+                  return (
+                    <div key={item.id+i} style={{position:'relative'}}>
+                      <div style={{position:'absolute',left:-28,top:8,width:7,height:7,borderRadius:'50%',background:owner.color,border:'2px solid #F8F6F1',boxShadow:`0 0 0 1px ${owner.color}`}}></div>
+                      <div className="card" style={{padding:'10px 13px'}}>
+                        <p style={{fontSize:13,fontWeight:500,color:'#2D2820'}}>📅 {item.title}</p>
+                        <p style={{fontSize:11,color:'#A09688',marginTop:2}}>{item.date} · {owner.name}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════
+   SETUP SCREEN
+════════════════════════════════════════════════════════ */
 function SetupScreen() {
   return (
-    <div className="min-h-screen bg-stone-50 flex items-center justify-center p-6">
-      <div className="max-w-sm w-full">
-        <div className="w-12 h-12 rounded-2xl bg-amber-500 flex items-center justify-center mb-4 mx-auto">
-          <Icon name="Settings" size={22} className="text-white" />
+    <div style={{minHeight:'100vh',background:'#F8F6F1',display:'flex',alignItems:'center',justifyContent:'center',padding:24,fontFamily:"'Noto Sans TC',sans-serif"}}>
+      <div style={{maxWidth:380,width:'100%'}}>
+        <div style={{width:48,height:48,borderRadius:14,background:'#2D4A3E',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:16,margin:'0 auto 16px'}}>
+          <span style={{fontSize:22,color:'#F8F6F1'}}>✦</span>
         </div>
-        <h1 className="font-display text-xl font-bold text-stone-800 text-center mb-2">需要先設定連線</h1>
-        <p className="text-sm text-stone-500 text-center mb-6">這個網站需要連接你的 Google Sheets 才能儲存資料。</p>
-        <div className="space-y-3 text-sm text-stone-700 bg-white rounded-2xl border border-stone-200 p-4">
-          <p className="font-semibold text-stone-800">設定步驟：</p>
-          <ol className="space-y-2 list-decimal list-inside text-stone-600">
-            <li>建立一個新的 Google Sheets（隨便命名）</li>
-            <li>建立一個 Google Drive 資料夾（用來存照片）</li>
-            <li>開啟 Google Apps Script（script.google.com）建立新專案</li>
-            <li>把 <code className="bg-stone-100 px-1 rounded text-xs">Code.gs</code> 的內容貼進去，填入兩個 ID</li>
-            <li>點「部署 &gt; 新增部署」，類型選網路應用程式，執行身分選「我」，存取選「所有人」</li>
-            <li>複製產生的 Web App 網址</li>
-            <li>打開 <code className="bg-stone-100 px-1 rounded text-xs">index.html</code>，把網址貼到最上方的 <code className="bg-stone-100 px-1 rounded text-xs">APPS_SCRIPT_URL</code></li>
-            <li>儲存後重新開啟，就可以開始使用了</li>
+        <h1 style={{fontFamily:"'Noto Serif TC',serif",fontSize:20,fontWeight:400,color:'#2D2820',textAlign:'center',marginBottom:8}}>需要先設定連線</h1>
+        <p style={{fontSize:13,color:'#A09688',textAlign:'center',marginBottom:20}}>請將 Google Apps Script 網址貼入 <code style={{background:'#EDE8E0',padding:'1px 5px',borderRadius:5,fontSize:12}}>APPS_SCRIPT_URL</code></p>
+        <div style={{background:'rgba(255,255,255,.8)',border:'1px solid rgba(180,172,160,.4)',borderRadius:16,padding:'20px',fontSize:13,color:'#3D3830'}}>
+          <p style={{fontWeight:500,marginBottom:12}}>設定步驟</p>
+          <ol style={{paddingLeft:18,display:'flex',flexDirection:'column',gap:8,color:'#7D7468'}}>
+            <li>建立 Google Sheets 與 Google Drive 資料夾</li>
+            <li>到 <a href="https://script.google.com" target="_blank" style={{color:'#2D4A3E'}}>script.google.com</a> 建立 Apps Script</li>
+            <li>貼入 <code style={{background:'#EDE8E0',padding:'1px 4px',borderRadius:4,fontSize:11}}>Code.gs</code>，填入 SHEET_ID 和 FOLDER_ID</li>
+            <li>部署為「網路應用程式」，存取選「所有人」</li>
+            <li>複製 Web App 網址</li>
+            <li>用文字編輯器打開 <code style={{background:'#EDE8E0',padding:'1px 4px',borderRadius:4,fontSize:11}}>platform.html</code>，貼入網址</li>
           </ol>
         </div>
       </div>
@@ -1174,130 +1067,123 @@ function SetupScreen() {
   );
 }
 
-/* ================================================================
-   主程式 App
-   ================================================================ */
-
+/* ════════════════════════════════════════════════════════
+   APP
+════════════════════════════════════════════════════════ */
 function App() {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [loaded, setLoaded] = useState(false);
-  const [loadError, setLoadError] = useState('');
-  const [syncing, setSyncing] = useState(false);
+  const [page, setPage] = useState('home');
 
-  const [dreams, setDreams] = useState([]);
-  const [projects, setProjects] = useState([]);
-  const [tasks, setTasks] = useState([]);
-  const [events, setEvents] = useState([]);
-  const [support, setSupport] = useState({});
+  const [state, setState] = useState(() => {
+    const saved = lsLoad();
+    return saved || buildDefaultState();
+  });
 
-  const now = new Date();
-  const [calYear, setCalYear] = useState(now.getFullYear());
-  const [calMonth, setCalMonth] = useState(now.getMonth());
-  const [selectedDay, setSelectedDay] = useState(null);
-  const [selectedDreamId, setSelectedDreamId] = useState(null);
-  const [selectedTaskId, setSelectedTaskId] = useState(null);
-  const [kanbanFilter, setKanbanFilter] = useState('all');
+  const [loading, setLoading]   = useState(IS_CONFIGURED);
+  const [loadErr, setLoadErr]   = useState('');
+  const [syncing, setSyncing]   = useState(false);
+  const saveTimerRef = useRef(null);
 
-  async function fetchData() {
+  // Load from Sheets on mount
+  useEffect(() => {
+    if (!IS_CONFIGURED) return;
+    fetchFromSheets();
+  }, []);
+
+  async function fetchFromSheets() {
     setSyncing(true);
     try {
-      const data = await loadAllData();
-      setDreams(data.dreams || []);
-      setProjects(data.projects || []);
-      setTasks(data.tasks || []);
-      setEvents(data.events || []);
-      setSupport(data.support || {});
-      setLoadError('');
-    } catch (err) {
-      setLoadError('無法讀取資料：' + err.message);
+      const data = await sheetsLoadAll();
+      setState(prev => {
+        const next = { ...prev };
+        if (data.demData)     next.demData     = data.demData;
+        if (data.calEvents)   next.calEvents   = data.calEvents;
+        if (data.todayStatus) next.todayStatus = data.todayStatus;
+        if (data.support)     next.support     = data.support;
+        lsSave(next);
+        return next;
+      });
+      setLoadErr('');
+    } catch(err) {
+      setLoadErr('同步失敗：' + err.message);
     } finally {
-      setSyncing(false); setLoaded(true);
+      setSyncing(false); setLoading(false);
     }
   }
 
-  useEffect(() => { if (IS_CONFIGURED) fetchData(); else setLoaded(true); }, []);
+  // Auto-save: localStorage immediately, Sheets debounced 3s
+  useEffect(() => {
+    lsSave(state);
+    if (!IS_CONFIGURED) return;
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      sheetsSave('demData',     state.demData).catch(()=>{});
+      sheetsSave('calEvents',   state.calEvents).catch(()=>{});
+      sheetsSave('todayStatus', state.todayStatus).catch(()=>{});
+      sheetsSave('support',     state.support).catch(()=>{});
+    }, 3000);
+    return () => clearTimeout(saveTimerRef.current);
+  }, [state]);
 
-  /* 狀態更新 + 自動同步到 Sheets */
-  function save(key, updater, setter) {
-    setter(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      saveToSheets(key, next).catch(err => console.error('儲存失敗', key, err));
-      return next;
-    });
+  function setDemData(updater) {
+    setState(s => ({ ...s, demData: typeof updater==='function' ? updater(s.demData) : updater }));
   }
-
-  function cycleTask(id) { save('tasks', ts => ts.map(t => t.id===id ? {...t,status:nextTaskStatus(t.status)} : t), setTasks); }
-  function setTaskStatus(id, status) { save('tasks', ts => ts.map(t => t.id===id ? {...t,status} : t), setTasks); }
-  function addTask(projectId, title) { save('tasks', ts => [...ts, {id:'t'+Date.now(),projectId,title,description:'',dueDate:'',owner:'us',supporters:[],status:'待開始'}], setTasks); }
-  function updateTask(id, fields) { save('tasks', ts => ts.map(t => t.id===id ? {...t,...fields} : t), setTasks); }
-  function deleteTask(id) { save('tasks', ts => ts.filter(t => t.id!==id), setTasks); }
-
-  function addDream(fields) { save('dreams', ds => [...ds, {id:'d'+Date.now(),title:fields.title,owner:fields.owner,status:'萌芽中',description:fields.description||'',why:fields.why||'',image:fields.image||'',updates:[]}], setDreams); }
-  function updateDream(id, fields) { save('dreams', ds => ds.map(d => d.id===id ? {...d,...fields} : d), setDreams); }
-  function deleteDream(id) {
-    const pids = projects.filter(p => p.dreamId===id).map(p => p.id);
-    save('tasks', ts => ts.filter(t => !pids.includes(t.projectId)), setTasks);
-    save('projects', ps => ps.filter(p => p.dreamId!==id), setProjects);
-    save('dreams', ds => ds.filter(d => d.id!==id), setDreams);
-    save('support', s => { const c={...s}; delete c[id]; return c; }, setSupport);
-    setSelectedDreamId(cur => cur===id ? null : cur);
+  function setCalEvents(updater) {
+    setState(s => ({ ...s, calEvents: typeof updater==='function' ? updater(s.calEvents) : updater }));
   }
-
-  function addProject(dreamId, title, owner) { save('projects', ps => [...ps, {id:'p'+Date.now(),dreamId,title,owner}], setProjects); }
-  function updateProject(id, fields) { save('projects', ps => ps.map(p => p.id===id ? {...p,...fields} : p), setProjects); }
-  function deleteProject(id) {
-    save('tasks', ts => ts.filter(t => t.projectId!==id), setTasks);
-    save('projects', ps => ps.filter(p => p.id!==id), setProjects);
+  function setTodayStatus(person, field, value) {
+    setState(s => ({ ...s, todayStatus: { ...s.todayStatus, [person]: { ...s.todayStatus[person], [field]: value } } }));
   }
-
-  function addEvent(date, fields) { save('events', es => [...es, {id:'e'+Date.now(),date,...fields}], setEvents); }
-
-  function addSupportReceived(dreamId, note) {
-    save('support', s => { const c = s[dreamId]||{needed:[],received:[]}; return {...s,[dreamId]:{...c,received:[...c.received,note]}}; }, setSupport);
+  function handleSupportChange(nodeId, newSup) {
+    setState(s => ({ ...s, support: { ...s.support, [nodeId]: newSup } }));
   }
-  function addSupportNeeded(dreamId, note) {
-    save('support', s => { const c = s[dreamId]||{needed:[],received:[]}; return {...s,[dreamId]:{...c,needed:[...c.needed,note]}}; }, setSupport);
-  }
-
-  const selectedDream = dreams.find(d => d.id === selectedDreamId) || null;
-  const selectedTask  = tasks.find(t => t.id === selectedTaskId) || null;
-  const selectedTaskCtx = selectedTask ? getBreadcrumb(selectedTask, projects, dreams) : { project: null, dream: null };
 
   if (!IS_CONFIGURED) return <SetupScreen />;
-
-  if (!loaded) return (
-    <div className="min-h-screen bg-stone-50 flex items-center justify-center">
-      <div className="text-center">
-        <div className="w-9 h-9 rounded-xl bg-amber-500 flex items-center justify-center mx-auto mb-2"><Icon name="Sparkles" size={18} className="text-white" /></div>
-        <p className="text-sm text-stone-400">讀取共同資料中...</p>
-      </div>
-    </div>
-  );
-
-  if (loadError) return (
-    <div className="min-h-screen bg-stone-50 flex items-center justify-center p-6">
-      <div className="text-center max-w-xs">
-        <p className="text-sm font-medium text-rose-600 mb-2">{loadError}</p>
-        <button onClick={fetchData} className="text-sm text-amber-600 underline">重新嘗試</button>
+  if (loading) return (
+    <div style={{minHeight:'100vh',background:'#F8F6F1',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Noto Sans TC',sans-serif"}}>
+      <div style={{textAlign:'center'}}>
+        <div style={{width:40,height:40,borderRadius:12,background:'#2D4A3E',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 10px'}}>
+          <span style={{fontSize:18,color:'#F8F6F1'}}>✦</span>
+        </div>
+        <p style={{fontSize:13,color:'#A09688'}}>讀取共同資料中…</p>
+        {loadErr && <p style={{fontSize:12,color:'#C0887A',marginTop:6}}>{loadErr}</p>}
       </div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-800 pb-20">
-      <TopBar onSync={fetchData} syncing={syncing} />
-      <main className="max-w-5xl mx-auto px-4 pt-4">
-        {activeTab === 'dashboard' && <Dashboard dreams={dreams} projects={projects} tasks={tasks} events={events} openDream={setSelectedDreamId} goToTab={setActiveTab} />}
-        {activeTab === 'calendar'  && <CalendarView events={events} year={calYear} month={calMonth} setYear={setCalYear} setMonth={setCalMonth} openDay={setSelectedDay} />}
-        {activeTab === 'dreams'    && <DreamMapView dreams={dreams} projects={projects} tasks={tasks} openDream={setSelectedDreamId} onAddDream={addDream} />}
-        {activeTab === 'kanban'    && <KanbanView dreams={dreams} projects={projects} tasks={tasks} filterDreamId={kanbanFilter} setFilterDreamId={setKanbanFilter} openTask={setSelectedTaskId} moveTask={setTaskStatus} onAddTask={addTask} goToDreams={() => setActiveTab('dreams')} />}
-        {activeTab === 'memories'  && <MemoryWallView tasks={tasks} projects={projects} dreams={dreams} />}
-      </main>
-      <BottomNav active={activeTab} onChange={setActiveTab} />
+    <div className="platform">
+      {/* Sidebar */}
+      <nav className="sidebar">
+        <div className="sidebar-brand">✦</div>
+        {PAGES.map(p => (
+          <button key={p.key} onClick={() => setPage(p.key)} className={`nav-btn${page===p.key?' active':''}`} title={p.label}>
+            <span className="nav-icon">{p.icon}</span>
+            <span className="nav-label">{p.label}</span>
+          </button>
+        ))}
+        <button onClick={fetchFromSheets} disabled={syncing} title="同步最新資料" className={`sync-btn${syncing?' spinning':''}`} style={{fontSize:15}}>↻</button>
+      </nav>
 
-      {selectedDream && <DreamDetailModal dream={selectedDream} projects={projects} tasks={tasks} support={support} onClose={() => setSelectedDreamId(null)} cycleTask={cycleTask} goToKanban={id => { setKanbanFilter(id); setActiveTab('kanban'); }} onAddSupportReceived={addSupportReceived} onAddSupportNeeded={addSupportNeeded} onUpdateDream={updateDream} onDeleteDream={deleteDream} onAddProject={addProject} onDeleteProject={deleteProject} onUpdateProject={updateProject} onAddTask={addTask} openTask={setSelectedTaskId} />}
-      {selectedTask  && <TaskDetailModal task={selectedTask} project={selectedTaskCtx.project} dream={selectedTaskCtx.dream} onClose={() => setSelectedTaskId(null)} setStatus={setTaskStatus} onUpdateTask={updateTask} onDeleteTask={deleteTask} />}
-      {selectedDay   && <DayModal dateKey={selectedDay} events={events} onClose={() => setSelectedDay(null)} onAddEvent={addEvent} />}
+      {/* Page content */}
+      <div className="page-content">
+        {page==='home'     && <HomePage     demData={state.demData} calEvents={state.calEvents} todayStatus={state.todayStatus} setTodayStatus={setTodayStatus} setPage={setPage} />}
+        {page==='dream'    && <div style={{flex:1,display:'flex',overflow:'hidden'}}><DreamExpansionMap data={state.demData} setData={setDemData} support={state.support} onSupportChange={handleSupportChange} /></div>}
+        {page==='calendar' && <CalendarPage calEvents={state.calEvents} setCalEvents={setCalEvents} />}
+        {page==='projects' && <ProjectsPage demData={state.demData} setDemData={setDemData} />}
+        {page==='memories' && <MemoriesPage demData={state.demData} />}
+        {page==='review'   && <ReviewPage  demData={state.demData} calEvents={state.calEvents} />}
+        {loadErr&&page!=='dream'&&<div style={{position:'fixed',bottom:70,left:'50%',transform:'translateX(-50%)',background:'rgba(192,136,122,.9)',color:'#FFF',fontSize:12,padding:'6px 14px',borderRadius:20,pointerEvents:'none',zIndex:30}}>{loadErr}</div>}
+      </div>
+
+      {/* Bottom nav (mobile) */}
+      <nav className="bottom-nav">
+        {PAGES.map(p => (
+          <button key={p.key} onClick={() => setPage(p.key)} className={`nav-btn${page===p.key?' active':''}`}>
+            <span className="nav-icon">{p.icon}</span>
+            <span className="nav-label" style={{color:'rgba(248,246,241,.7)',fontSize:8}}>{p.label}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
