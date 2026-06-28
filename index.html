@@ -404,6 +404,12 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder }) {
         <span style={{fontSize:node.title.length>7?11:12,fontWeight:500,color:hovered?'#2D4A3E':'#3D3830',textAlign:'center',lineHeight:1.5,letterSpacing:'.03em',padding:'0 10px',transition:'color .18s',position:'relative'}}>
           {node.title}
         </span>
+        {node.assignee && (
+          <span style={{display:'flex',alignItems:'center',gap:2,marginTop:2,position:'relative'}}>
+            <span style={{width:6,height:6,borderRadius:'50%',background:PEOPLE[node.assignee]?.color||'#999',display:'inline-block'}}></span>
+            {node.assignee==='us'&&<span style={{fontSize:8,color:'#A09688'}}>共</span>}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -523,13 +529,12 @@ function DreamExpansionMap({ data, setData, support, onSupportChange }) {
    HOME PAGE
 ════════════════════════════════════════════════════════ */
 function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage }) {
-  const today  = todayKey();
+  const today   = todayKey();
   const weekEnd = new Date(); weekEnd.setDate(weekEnd.getDate()+7);
   const weekStr = weekEnd.toISOString().slice(0,10);
-  const month   = today.slice(0,7);
 
   const todayEvs    = calEvents.filter(e=>e.date===today);
-  const upcomingEvs = calEvents.filter(e=>e.date>today).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,5);
+  const upcomingEvs = calEvents.filter(e=>e.date>today&&e.date<=weekStr).sort((a,b)=>a.date.localeCompare(b.date));
 
   const allActions = useMemo(()=>{
     const r=[];
@@ -544,32 +549,58 @@ function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage }) 
   },[demData]);
 
   const todayTodos = allActions.filter(a=>a.dueDate===today&&a.status!=='done');
-  const doingTodos = allActions.filter(a=>a.status==='doing').slice(0,4);
+  const doingTodos = allActions.filter(a=>a.status==='doing');
+  const recentDone = allActions.filter(a=>a.status==='done').sort((a,b)=>(b.completedAt||'').localeCompare(a.completedAt||'')).slice(0,3);
+  const shownTodos = [...todayTodos,...doingTodos.filter(a=>!todayTodos.find(b=>b.id===a.id))].slice(0,5);
+
+  const domainProgress = useMemo(()=>demData.domains.map(dom=>{
+    const projs=demData.projects[dom.id]||[];
+    const acts=projs.flatMap(p=>demData.actions[p.id]||[]);
+    return {...dom,projCount:projs.length,actTotal:acts.length,actDone:acts.filter(a=>a.status==='done').length};
+  }),[demData]);
+
+  function Section({ label, action, children }) {
+    return (
+      <div style={{marginBottom:18}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:9}}>
+          <p style={{fontSize:10,color:'#A09688',letterSpacing:'.12em',textTransform:'uppercase'}}>{label}</p>
+          {action}
+        </div>
+        {children}
+      </div>
+    );
+  }
 
   return (
     <div className="page-scroll">
-      <div style={{padding:'24px 24px 40px',maxWidth:680,margin:'0 auto'}}>
-        <div style={{marginBottom:24}}>
-          <p style={{fontSize:11,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:3}}>{todayLabel()}</p>
-          <h1 style={{fontFamily:"'Noto Serif TC',serif",fontSize:20,fontWeight:400,color:'#2D2820',letterSpacing:'.04em'}}>早安，蘋果派 & 松果 ✦</h1>
+      <div style={{padding:'20px 18px 44px',maxWidth:640,margin:'0 auto'}}>
+
+        {/* Header */}
+        <div style={{marginBottom:18}}>
+          <p style={{fontSize:10,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:2}}>{todayLabel()}</p>
+          <h1 style={{fontFamily:"'Noto Serif TC',serif",fontSize:19,fontWeight:400,color:'#2D2820'}}>早安，蘋果派 & 松果 ✦</h1>
         </div>
 
-        {/* Status cards */}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:22}}>
+        {/* Person status */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:18}}>
           {[APPLE,PINE].map(p=>{
-            const st = todayStatus[p.key];
-            const isHigh = st.stress==='high';
-            const evs = todayEvs.filter(e=>e.owner===p.key||e.owner==='us');
+            const st=todayStatus[p.key];
+            const isHigh=st.stress==='high';
+            const evs=todayEvs.filter(e=>e.owner===p.key||e.owner==='us');
             return (
-              <div key={p.key} className="card" style={{padding:'16px'}}>
-                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-                  <span style={{width:10,height:10,borderRadius:'50%',background:p.color,display:'inline-block'}}></span>
-                  <span style={{fontSize:13,fontWeight:500,color:'#2D2820'}}>{p.name}</span>
-                  <span style={{marginLeft:'auto',fontSize:11,padding:'2px 8px',borderRadius:12,background:isHigh?'rgba(192,136,122,.12)':'rgba(91,163,123,.12)',color:isHigh?'#C0887A':'#5BA37B'}}>{isHigh?'高壓':'一般'}</span>
+              <div key={p.key} className="card" style={{padding:'13px 14px'}}>
+                <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:8}}>
+                  <span style={{width:8,height:8,borderRadius:'50%',background:p.color,display:'inline-block'}}></span>
+                  <span style={{fontSize:12,fontWeight:500,color:'#2D2820'}}>{p.name}</span>
+                  <span style={{marginLeft:'auto',fontSize:10,padding:'1px 7px',borderRadius:9,
+                    background:isHigh?'rgba(192,136,122,.12)':'rgba(91,163,123,.12)',
+                    color:isHigh?'#C0887A':'#5BA37B'}}>{isHigh?'🔴 高壓':'● 一般'}</span>
                 </div>
-                {evs.length===0 ? <p style={{fontSize:12,color:'#C0B8AE'}}>今天沒有安排</p>
-                  : evs.slice(0,2).map(e=><p key={e.id} style={{fontSize:12,color:'#7D7468',marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>· {e.title}</p>)}
-                <button onClick={()=>setTodayStatus(p.key,'stress',isHigh?'normal':'high')} style={{marginTop:10,fontSize:10,padding:'3px 10px',borderRadius:10,border:`1px solid ${isHigh?'#C0887A':'#E0D9CF'}`,background:'none',color:isHigh?'#C0887A':'#A09688',cursor:'pointer'}}>
+                {evs.length===0
+                  ?<p style={{fontSize:11,color:'#C0B8AE'}}>今天沒有安排</p>
+                  :evs.slice(0,2).map(e=><p key={e.id} style={{fontSize:11,color:'#7D7468',marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>· {e.title}</p>)}
+                <button onClick={()=>setTodayStatus(p.key,'stress',isHigh?'normal':'high')}
+                  style={{marginTop:8,fontSize:9,padding:'2px 8px',borderRadius:8,border:`1px solid ${isHigh?'#C0887A':'#E0D9CF'}`,background:'none',color:isHigh?'#C0887A':'#A09688',cursor:'pointer'}}>
                   {isHigh?'切換為一般':'標記高壓'}
                 </button>
               </div>
@@ -578,82 +609,125 @@ function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage }) 
         </div>
 
         {/* Today todos */}
-        {(todayTodos.length>0||doingTodos.length>0) && (
-          <div style={{marginBottom:22}}>
-            <p style={{fontSize:11,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:10}}>今日待辦</p>
-            <div style={{display:'flex',flexDirection:'column',gap:7}}>
-              {[...todayTodos,...doingTodos.filter(a=>!todayTodos.find(b=>b.id===a.id))].slice(0,5).map(a=>{
+        <Section label="今日 & 進行中" action={<button onClick={()=>setPage('projects')} style={{fontSize:10,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>全部 →</button>}>
+          {shownTodos.length===0
+            ?<p style={{fontSize:12,color:'#C0B8AE',padding:'8px 0'}}>沒有待辦項目</p>
+            :<div style={{display:'flex',flexDirection:'column',gap:5}}>
+              {shownTodos.map(a=>{
+                const asn=PEOPLE[a.assignee]||PEOPLE.us;
                 const sc=STATUS_COLOR[a.status];
                 return (
-                  <div key={a.id} className="card" style={{padding:'11px 14px',display:'flex',alignItems:'center',gap:10}}>
-                    <div style={{width:7,height:7,borderRadius:'50%',background:sc.text,flexShrink:0}}></div>
+                  <div key={a.id} className="card" style={{padding:'9px 12px',display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{width:6,height:6,borderRadius:'50%',background:asn.color,flexShrink:0}}></span>
                     <div style={{flex:1,minWidth:0}}>
-                      <p style={{fontSize:13,color:'#2D2820',fontWeight:500}}>{a.title}</p>
-                      <p style={{fontSize:11,color:'#A09688',marginTop:1}}>{a.domainTitle} › {a.projectTitle}</p>
+                      <p style={{fontSize:12,color:'#2D2820',fontWeight:500}}>{a.title}</p>
+                      <p style={{fontSize:10,color:'#A09688',marginTop:1}}>{a.domainTitle} › {a.projectTitle}</p>
                     </div>
-                    <span style={{fontSize:11,padding:'2px 8px',borderRadius:10,background:sc.bg,color:sc.text,border:`1px solid ${sc.border}`,flexShrink:0}}>{STATUS_LABEL[a.status]}</span>
+                    <span style={{fontSize:10,padding:'2px 7px',borderRadius:8,background:sc.bg,color:sc.text,border:`1px solid ${sc.border}`,flexShrink:0}}>{STATUS_LABEL[a.status]}</span>
                   </div>
                 );
               })}
-            </div>
-            <button onClick={()=>setPage('projects')} style={{marginTop:8,fontSize:12,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>查看全部專案 →</button>
-          </div>
-        )}
+            </div>}
+        </Section>
 
         {/* Today events */}
-        {todayEvs.length>0 && (
-          <div style={{marginBottom:22}}>
-            <p style={{fontSize:11,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:10}}>今日行程</p>
-            <div style={{display:'flex',flexDirection:'column',gap:7}}>
+        {todayEvs.length>0&&(
+          <Section label="今日行程">
+            <div style={{display:'flex',flexDirection:'column',gap:5}}>
               {todayEvs.map(e=>{
-                const owner=PEOPLE[e.owner]||PEOPLE.us;
+                const o=PEOPLE[e.owner]||PEOPLE.us;
                 return (
-                  <div key={e.id} className="card" style={{padding:'11px 14px',display:'flex',alignItems:'center',gap:10}}>
-                    <span style={{width:7,height:7,borderRadius:'50%',background:owner.color,flexShrink:0}}></span>
+                  <div key={e.id} className="card" style={{padding:'9px 12px',display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{width:6,height:6,borderRadius:'50%',background:o.color,flexShrink:0}}></span>
                     <div style={{flex:1,minWidth:0}}>
-                      <p style={{fontSize:13,color:'#2D2820',fontWeight:500}}>{e.title}</p>
-                      <p style={{fontSize:11,color:'#A09688',marginTop:1}}>{e.time&&`${e.time} · `}{owner.name}</p>
+                      <p style={{fontSize:12,color:'#2D2820',fontWeight:500}}>{e.title}</p>
+                      <p style={{fontSize:10,color:'#A09688',marginTop:1}}>{e.time&&`${e.time} · `}{o.name}{e.stress==='high'?' · 🔴 高壓':''}{e.tags?.length?' · '+e.tags.join('、'):''}</p>
                     </div>
-                    {e.stress==='high'&&<span style={{fontSize:10,color:'#C0887A',padding:'2px 8px',borderRadius:10,background:'rgba(192,136,122,.1)',border:'1px solid rgba(192,136,122,.3)'}}>高壓</span>}
                   </div>
                 );
               })}
             </div>
-          </div>
+          </Section>
         )}
 
-        {/* Upcoming */}
-        {upcomingEvs.length>0 && (
-          <div>
-            <p style={{fontSize:11,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:10}}>即將到來</p>
-            <div style={{display:'flex',flexDirection:'column',gap:7}}>
-              {upcomingEvs.map(e=>{
-                const owner=PEOPLE[e.owner]||PEOPLE.us;
+        {/* This week */}
+        {upcomingEvs.length>0&&(
+          <Section label="本週行程" action={<button onClick={()=>setPage('calendar')} style={{fontSize:10,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>月曆 →</button>}>
+            <div style={{display:'flex',flexDirection:'column',gap:5}}>
+              {upcomingEvs.slice(0,4).map(e=>{
+                const o=PEOPLE[e.owner]||PEOPLE.us;
                 const [,mm,dd]=e.date.split('-');
                 return (
-                  <div key={e.id} className="card" style={{padding:'11px 14px',display:'flex',alignItems:'center',gap:12}}>
-                    <div style={{width:38,height:38,borderRadius:9,background:'rgba(45,74,62,.08)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                      <span style={{fontSize:9,color:'#A09688'}}>{mm}月</span>
-                      <span style={{fontSize:14,fontWeight:600,color:'#2D4A3E',lineHeight:1}}>{dd}</span>
+                  <div key={e.id} className="card" style={{padding:'9px 12px',display:'flex',alignItems:'center',gap:10}}>
+                    <div style={{width:32,height:32,borderRadius:7,background:'rgba(45,74,62,.07)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                      <span style={{fontSize:8,color:'#A09688',lineHeight:1}}>{mm}月</span>
+                      <span style={{fontSize:13,fontWeight:600,color:'#2D4A3E',lineHeight:1.2}}>{dd}</span>
                     </div>
                     <div style={{flex:1,minWidth:0}}>
-                      <p style={{fontSize:13,color:'#2D2820',fontWeight:500}}>{e.title}</p>
-                      <p style={{fontSize:11,color:'#A09688',marginTop:1}}>{owner.name}{e.tags?.length?' · '+e.tags.join(' · '):''}</p>
+                      <p style={{fontSize:12,color:'#2D2820',fontWeight:500}}>{e.title}</p>
+                      <p style={{fontSize:10,color:'#A09688',marginTop:1}}>{o.name}{e.tags?.length?' · '+e.tags.join('、'):''}</p>
+                    </div>
+                    {e.stress==='high'&&<span style={{fontSize:10,color:'#C0887A'}}>🔴</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </Section>
+        )}
+
+        {/* Domain progress */}
+        {domainProgress.filter(d=>d.actTotal>0).length>0&&(
+          <Section label="人生領域進度" action={<button onClick={()=>setPage('dream')} style={{fontSize:10,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>夢想地圖 →</button>}>
+            <div style={{display:'flex',flexDirection:'column',gap:5}}>
+              {domainProgress.filter(d=>d.actTotal>0).map(dom=>{
+                const pct=Math.round(dom.actDone/dom.actTotal*100);
+                return (
+                  <div key={dom.id} className="card" style={{padding:'9px 12px'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:5}}>
+                      <p style={{fontSize:12,color:'#2D2820',fontWeight:500}}>{dom.title}</p>
+                      <p style={{fontSize:10,color:'#A09688'}}>{dom.actDone}/{dom.actTotal}</p>
+                    </div>
+                    <div style={{width:'100%',height:3,background:'rgba(180,172,160,.25)',borderRadius:3,overflow:'hidden'}}>
+                      <div style={{height:'100%',width:`${pct}%`,background:'#2D4A3E',borderRadius:3}}></div>
                     </div>
                   </div>
                 );
               })}
             </div>
-          </div>
+          </Section>
         )}
 
-        {todayEvs.length===0&&upcomingEvs.length===0&&todayTodos.length===0&&doingTodos.length===0&&(
-          <div style={{textAlign:'center',padding:'48px 0',color:'#C0B8AE'}}>
-            <p style={{fontSize:32,marginBottom:10}}>✦</p>
-            <p style={{fontFamily:"'Noto Serif TC',serif",fontSize:14}}>今天還是空白的</p>
-            <p style={{fontSize:12,marginTop:8}}>去月曆加入行程，或到夢想地圖展開計畫</p>
-          </div>
+        {/* Recently completed */}
+        {recentDone.length>0&&(
+          <Section label="最近完成 ✓" action={<button onClick={()=>setPage('memories')} style={{fontSize:10,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>回憶牆 →</button>}>
+            <div style={{display:'flex',flexDirection:'column',gap:5}}>
+              {recentDone.map(a=>{
+                const asn=PEOPLE[a.assignee]||PEOPLE.us;
+                return (
+                  <div key={a.id} className="card" style={{padding:'9px 12px',display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:11,color:'#2D4A3E'}}>✓</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <p style={{fontSize:12,color:'#2D2820',fontWeight:500}}>{a.title}</p>
+                      <p style={{fontSize:10,color:'#A09688',marginTop:1}}>{a.domainTitle} · {asn.name}</p>
+                    </div>
+                    {a.completedAt&&<span style={{fontSize:9,color:'#C0B8AE',flexShrink:0}}>{a.completedAt.slice(5)}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          </Section>
         )}
+
+        {/* Dream Map entry */}
+        <button onClick={()=>setPage('dream')} style={{width:'100%',background:'#2D4A3E',border:'none',borderRadius:13,padding:'15px 18px',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer'}}
+          onMouseEnter={e=>e.currentTarget.style.background='#3A5F4E'} onMouseLeave={e=>e.currentTarget.style.background='#2D4A3E'}>
+          <div style={{textAlign:'left'}}>
+            <p style={{fontFamily:"'Noto Serif TC',serif",fontSize:14,color:'#F8F6F1',fontWeight:400}}>人生夢想展開圖</p>
+            <p style={{fontSize:10,color:'rgba(248,246,241,.6)',marginTop:2}}>共創理想生活 · {demData.domains.length} 個人生領域</p>
+          </div>
+          <span style={{fontSize:20,color:'rgba(248,246,241,.65)'}}>✦ →</span>
+        </button>
+
       </div>
     </div>
   );
@@ -709,62 +783,116 @@ function CalendarPage({ calEvents, setCalEvents }) {
 }
 
 function DayModal({ dateKey, events, setEvents, onClose }) {
-  const [title,setTitle]=useState('');
-  const [time,setTime]=useState('19:00');
-  const [owner,setOwner]=useState('us');
-  const [stress,setStress]=useState('normal');
-  const [tags,setTags]=useState('');
-  const [showForm,setShowForm]=useState(false);
-  const dayEvs=events.filter(e=>e.date===dateKey).sort((a,b)=>a.time.localeCompare(b.time));
-  function submit(){
-    if(!title.trim()) return;
-    setEvents(p=>[...p,{id:uid(),date:dateKey,time,title:title.trim(),owner,stress,tags:tags.split(',').map(t=>t.trim()).filter(Boolean),note:''}]);
-    setTitle('');setTags('');setShowForm(false);
+  const [editId, setEditId]       = useState(null); // id of event being edited
+  const [showAdd, setShowAdd]     = useState(false);
+  const [form, setForm]           = useState({ title:'', time:'19:00', owner:'us', stress:'normal', tags:'', note:'' });
+
+  const dayEvs = events.filter(e=>e.date===dateKey).sort((a,b)=>a.time.localeCompare(b.time));
+
+  function startEdit(e) {
+    setEditId(e.id);
+    setForm({ title:e.title, time:e.time, owner:e.owner, stress:e.stress, tags:(e.tags||[]).join(','), note:e.note||'' });
+    setShowAdd(false);
   }
+  function startAdd() {
+    setEditId(null);
+    setForm({ title:'', time:'19:00', owner:'us', stress:'normal', tags:'', note:'' });
+    setShowAdd(true);
+  }
+  function saveEdit() {
+    if (!form.title.trim()) return;
+    setEvents(prev=>prev.map(e=>e.id===editId ? { ...e, ...formToEvent(form) } : e));
+    setEditId(null);
+  }
+  function saveAdd() {
+    if (!form.title.trim()) return;
+    setEvents(prev=>[...prev, { id:uid(), date:dateKey, ...formToEvent(form) }]);
+    setForm({ title:'', time:'19:00', owner:'us', stress:'normal', tags:'', note:'' });
+    setShowAdd(false);
+  }
+  function deleteEvent(id) {
+    if (window.confirm('確定要刪除這個事件嗎？')) {
+      setEvents(prev=>prev.filter(e=>e.id!==id));
+      if (editId===id) setEditId(null);
+    }
+  }
+  function formToEvent(f) {
+    return { title:f.title.trim(), time:f.time, owner:f.owner, stress:f.stress, tags:f.tags.split(',').map(t=>t.trim()).filter(Boolean), note:f.note };
+  }
+
+  function EventForm({ onSave, onCancel, saveLabel='儲存' }) {
+    return (
+      <div style={{border:'1.5px solid #E0D9CF',borderRadius:11,padding:14,display:'flex',flexDirection:'column',gap:9,background:'rgba(255,255,255,.8)'}}>
+        <input value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} placeholder="事件標題" />
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9}}>
+          <input type="time" value={form.time} onChange={e=>setForm(f=>({...f,time:e.target.value}))} />
+          <select value={form.owner} onChange={e=>setForm(f=>({...f,owner:e.target.value}))}>
+            <option value="apple">🍎 蘋果派</option>
+            <option value="pine">🌲 松果</option>
+            <option value="us">🤝 我們</option>
+          </select>
+        </div>
+        <select value={form.stress} onChange={e=>setForm(f=>({...f,stress:e.target.value}))}>
+          <option value="normal">一般</option>
+          <option value="high">🔴 高壓日</option>
+        </select>
+        <input value={form.tags} onChange={e=>setForm(f=>({...f,tags:e.target.value}))} placeholder="標籤（逗號分隔，如：出差,不回家,約會）" />
+        <input value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} placeholder="備註（選填）" />
+        <div style={{display:'flex',gap:8}}>
+          <button onClick={onSave} className="btn-primary" style={{flex:1}}>{saveLabel}</button>
+          <button onClick={onCancel} className="btn-ghost">取消</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div onClick={onClose} style={{position:'fixed',inset:0,zIndex:100,background:'rgba(45,40,35,.22)',backdropFilter:'blur(6px)',display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:'#FDFAF5',borderRadius:'20px 20px 0 0',padding:'22px',width:'100%',maxWidth:460,maxHeight:'80vh',overflowY:'auto',animation:'dialogIn .2s both'}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:'#FDFAF5',borderRadius:'20px 20px 0 0',padding:'22px',width:'100%',maxWidth:460,maxHeight:'85vh',overflowY:'auto',animation:'dialogIn .2s both'}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18}}>
           <h3 style={{fontSize:15,fontWeight:500,color:'#2D2820'}}>{dateKey}</h3>
           <button onClick={onClose} style={{background:'none',border:'none',fontSize:18,color:'#A09688',cursor:'pointer'}}>×</button>
         </div>
-        {dayEvs.length===0&&!showForm&&<p style={{fontSize:13,color:'#C0B8AE',textAlign:'center',padding:'16px 0'}}>這天還沒有事件</p>}
+
+        {dayEvs.length===0&&!showAdd&&<p style={{fontSize:13,color:'#C0B8AE',textAlign:'center',padding:'14px 0'}}>這天還沒有事件</p>}
+
         <div style={{display:'flex',flexDirection:'column',gap:7,marginBottom:14}}>
-          {dayEvs.map(e=>{const p=PEOPLE[e.owner]||PEOPLE.us;return(
-            <div key={e.id} style={{background:'rgba(255,255,255,.8)',border:'1.5px solid #E0D9CF',borderRadius:11,padding:'11px 13px',display:'flex',gap:8}}>
-              <span style={{width:7,height:7,borderRadius:'50%',background:p.color,flexShrink:0,marginTop:5}}></span>
-              <div style={{flex:1}}>
-                <p style={{fontSize:13,fontWeight:500,color:'#2D2820'}}>{e.title}</p>
-                <p style={{fontSize:11,color:'#A09688',marginTop:2}}>{e.time} · {p.name}{e.stress==='high'?' · 🔴 高壓':''}{e.tags?.length?' · '+e.tags.join('、'):''}</p>
+          {dayEvs.map(e=>{
+            const p=PEOPLE[e.owner]||PEOPLE.us;
+            if (editId===e.id) {
+              return (
+                <div key={e.id}>
+                  <p style={{fontSize:11,color:'#A09688',marginBottom:6}}>編輯事件</p>
+                  <EventForm onSave={saveEdit} onCancel={()=>setEditId(null)} saveLabel="更新" />
+                </div>
+              );
+            }
+            return (
+              <div key={e.id} style={{background:'rgba(255,255,255,.8)',border:'1.5px solid #E0D9CF',borderRadius:11,padding:'11px 13px'}}>
+                <div style={{display:'flex',alignItems:'flex-start',gap:8}}>
+                  <span style={{width:7,height:7,borderRadius:'50%',background:p.color,flexShrink:0,marginTop:5}}></span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <p style={{fontSize:13,fontWeight:500,color:'#2D2820'}}>{e.title}</p>
+                    <p style={{fontSize:11,color:'#A09688',marginTop:2}}>
+                      {e.time} · {p.name}
+                      {e.stress==='high'?' · 🔴 高壓':''}
+                      {e.tags?.length?' · '+e.tags.join('、'):''}
+                    </p>
+                    {e.note&&<p style={{fontSize:11,color:'#7D7468',marginTop:2}}>{e.note}</p>}
+                  </div>
+                  <div style={{display:'flex',gap:4,flexShrink:0}}>
+                    <button onClick={()=>startEdit(e)} style={{background:'none',border:'1px solid #E0D9CF',borderRadius:7,padding:'3px 8px',fontSize:11,color:'#A09688',cursor:'pointer'}}>編輯</button>
+                    <button onClick={()=>deleteEvent(e.id)} style={{background:'none',border:'1px solid rgba(192,136,122,.3)',borderRadius:7,padding:'3px 8px',fontSize:11,color:'#C0887A',cursor:'pointer'}}>刪除</button>
+                  </div>
+                </div>
               </div>
-              <button onClick={()=>setEvents(prev=>prev.filter(x=>x.id!==e.id))} style={{background:'none',border:'none',fontSize:14,color:'#C8C0B4',cursor:'pointer',flexShrink:0}}>×</button>
-            </div>
-          );})}
+            );
+          })}
         </div>
-        {!showForm
-          ? <button onClick={()=>setShowForm(true)} style={{width:'100%',background:'none',border:'1.5px dashed #D8D0C4',borderRadius:11,padding:'11px',fontSize:13,color:'#A09688',cursor:'pointer'}}>＋ 新增事件</button>
-          : (
-            <div style={{border:'1.5px solid #E0D9CF',borderRadius:11,padding:14,display:'flex',flexDirection:'column',gap:9}}>
-              <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="事件標題" />
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9}}>
-                <input type="time" value={time} onChange={e=>setTime(e.target.value)} />
-                <select value={owner} onChange={e=>setOwner(e.target.value)}>
-                  <option value="apple">🍎 蘋果派</option>
-                  <option value="pine">🌲 松果</option>
-                  <option value="us">🤝 我們</option>
-                </select>
-              </div>
-              <select value={stress} onChange={e=>setStress(e.target.value)}>
-                <option value="normal">一般</option>
-                <option value="high">🔴 高壓日</option>
-              </select>
-              <input value={tags} onChange={e=>setTags(e.target.value)} placeholder="標籤（逗號分隔，如：出差,不回家,約會）" />
-              <div style={{display:'flex',gap:8}}>
-                <button onClick={submit} className="btn-primary" style={{flex:1}}>儲存</button>
-                <button onClick={()=>setShowForm(false)} className="btn-ghost">取消</button>
-              </div>
-            </div>
-          )}
+
+        {showAdd
+          ? <EventForm onSave={saveAdd} onCancel={()=>setShowAdd(false)} saveLabel="新增" />
+          : <button onClick={startAdd} style={{width:'100%',background:'none',border:'1.5px dashed #D8D0C4',borderRadius:11,padding:'11px',fontSize:13,color:'#A09688',cursor:'pointer'}}>＋ 新增事件</button>}
       </div>
     </div>
   );
