@@ -404,10 +404,18 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder }) {
         <span style={{fontSize:node.title.length>7?11:12,fontWeight:500,color:hovered?'#2D4A3E':'#3D3830',textAlign:'center',lineHeight:1.5,letterSpacing:'.03em',padding:'0 10px',transition:'color .18s',position:'relative'}}>
           {node.title}
         </span>
+        {/* Owner emoji — always visible when set */}
         {node.assignee && (
-          <span style={{display:'flex',alignItems:'center',gap:2,marginTop:2,position:'relative'}}>
-            <span style={{width:6,height:6,borderRadius:'50%',background:PEOPLE[node.assignee]?.color||'#999',display:'inline-block'}}></span>
-            {node.assignee==='us'&&<span style={{fontSize:8,color:'#A09688'}}>共</span>}
+          <span style={{fontSize:11,position:'relative',marginTop:1,lineHeight:1}}>
+            {node.assignee==='apple'?'🍎':node.assignee==='pine'?'🌲':'🤝'}
+          </span>
+        )}
+        {/* Project / action counts passed via node._projCount / node._actCount */}
+        {(node._projCount!==undefined||node._actCount!==undefined) && (
+          <span style={{fontSize:8,color:'#A09688',position:'relative',textAlign:'center',lineHeight:1.6,marginTop:1}}>
+            {node._projCount!==undefined&&<span>{node._projCount}P</span>}
+            {node._projCount!==undefined&&node._actCount!==undefined&&<span style={{margin:'0 2px'}}>·</span>}
+            {node._actCount!==undefined&&<span>{node._actCount}A</span>}
           </span>
         )}
       </div>
@@ -435,8 +443,26 @@ function DreamExpansionMap({ data, setData, support, onSupportChange }) {
     return [];
   },[data]);
 
-  const children  = getList(current.id, current.depth);
-  const slots     = [...children,...Array(Math.max(0,8-children.length)).fill(null)].slice(0,9);
+  const children = useMemo(()=>{
+    const list = getList(current.id, current.depth);
+    // At domain level, enrich nodes with project/action counts for P3
+    if (current.depth===0) {
+      return list.map(dom=>{
+        const projs = data.projects[dom.id]||[];
+        const acts  = projs.flatMap(p=>data.actions[p.id]||[]);
+        return {...dom, _projCount:projs.length, _actCount:acts.length};
+      });
+    }
+    // At project level, enrich with action count
+    if (current.depth===1) {
+      return list.map(proj=>{
+        const acts = data.actions[proj.id]||[];
+        return {...proj, _actCount:acts.length};
+      });
+    }
+    return list;
+  },[getList, current, data]);
+  const slots = [...children,...Array(Math.max(0,8-children.length)).fill(null)].slice(0,9);
   const positions = orbitPositions(slots.length);
 
   const navigate = useCallback((ns)=>{ if(animating) return; setAnimating(true); setPhase('exit'); setPending(ns); },[animating]);
@@ -782,68 +808,80 @@ function CalendarPage({ calEvents, setCalEvents }) {
   );
 }
 
+/* EventForm lives outside DayModal so it never remounts on parent re-render — this fixes the IME bug */
+function EventForm({ form, setForm, onSave, onCancel, saveLabel }) {
+  return (
+    <div style={{border:'1.5px solid #E0D9CF',borderRadius:11,padding:14,display:'flex',flexDirection:'column',gap:10,background:'rgba(255,255,255,.8)'}}>
+      <input
+        value={form.title}
+        onChange={e=>setForm(f=>({...f,title:e.target.value}))}
+        placeholder="事件標題"
+        autoFocus
+      />
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9}}>
+        <input type="time" value={form.time} onChange={e=>setForm(f=>({...f,time:e.target.value}))} />
+        <select value={form.owner} onChange={e=>setForm(f=>({...f,owner:e.target.value}))}>
+          <option value="apple">🍎 蘋果派</option>
+          <option value="pine">🌲 松果</option>
+          <option value="us">🤝 我們</option>
+        </select>
+      </div>
+      <select value={form.stress} onChange={e=>setForm(f=>({...f,stress:e.target.value}))}>
+        <option value="normal">一般</option>
+        <option value="high">🔴 高壓日</option>
+      </select>
+      <input
+        value={form.tags}
+        onChange={e=>setForm(f=>({...f,tags:e.target.value}))}
+        placeholder="標籤（逗號分隔，如：出差,不回家,約會）"
+      />
+      <input
+        value={form.note}
+        onChange={e=>setForm(f=>({...f,note:e.target.value}))}
+        placeholder="備註（選填）"
+      />
+      <div style={{display:'flex',gap:8}}>
+        <button onClick={onSave} className="btn-primary" style={{flex:1}}>{saveLabel||'儲存'}</button>
+        <button onClick={onCancel} className="btn-ghost">取消</button>
+      </div>
+    </div>
+  );
+}
+
 function DayModal({ dateKey, events, setEvents, onClose }) {
-  const [editId, setEditId]       = useState(null); // id of event being edited
-  const [showAdd, setShowAdd]     = useState(false);
-  const [form, setForm]           = useState({ title:'', time:'19:00', owner:'us', stress:'normal', tags:'', note:'' });
+  const [editId,   setEditId]  = useState(null);
+  const [showAdd,  setShowAdd] = useState(false);
+  const emptyForm = { title:'', time:'19:00', owner:'us', stress:'normal', tags:'', note:'' };
+  const [form, setForm] = useState(emptyForm);
 
   const dayEvs = events.filter(e=>e.date===dateKey).sort((a,b)=>a.time.localeCompare(b.time));
 
-  function startEdit(e) {
-    setEditId(e.id);
-    setForm({ title:e.title, time:e.time, owner:e.owner, stress:e.stress, tags:(e.tags||[]).join(','), note:e.note||'' });
+  function startEdit(ev) {
+    setEditId(ev.id);
+    setForm({ title:ev.title, time:ev.time, owner:ev.owner, stress:ev.stress, tags:(ev.tags||[]).join(','), note:ev.note||'' });
     setShowAdd(false);
   }
   function startAdd() {
-    setEditId(null);
-    setForm({ title:'', time:'19:00', owner:'us', stress:'normal', tags:'', note:'' });
-    setShowAdd(true);
+    setEditId(null); setForm(emptyForm); setShowAdd(true);
+  }
+  function formToEvent(f) {
+    return { title:f.title.trim(), time:f.time, owner:f.owner, stress:f.stress, tags:f.tags.split(',').map(t=>t.trim()).filter(Boolean), note:f.note };
   }
   function saveEdit() {
     if (!form.title.trim()) return;
-    setEvents(prev=>prev.map(e=>e.id===editId ? { ...e, ...formToEvent(form) } : e));
+    setEvents(prev=>prev.map(e=>e.id===editId ? {...e,...formToEvent(form)} : e));
     setEditId(null);
   }
   function saveAdd() {
     if (!form.title.trim()) return;
-    setEvents(prev=>[...prev, { id:uid(), date:dateKey, ...formToEvent(form) }]);
-    setForm({ title:'', time:'19:00', owner:'us', stress:'normal', tags:'', note:'' });
-    setShowAdd(false);
+    setEvents(prev=>[...prev, {id:uid(), date:dateKey, ...formToEvent(form)}]);
+    setForm(emptyForm); setShowAdd(false);
   }
   function deleteEvent(id) {
     if (window.confirm('確定要刪除這個事件嗎？')) {
       setEvents(prev=>prev.filter(e=>e.id!==id));
       if (editId===id) setEditId(null);
     }
-  }
-  function formToEvent(f) {
-    return { title:f.title.trim(), time:f.time, owner:f.owner, stress:f.stress, tags:f.tags.split(',').map(t=>t.trim()).filter(Boolean), note:f.note };
-  }
-
-  function EventForm({ onSave, onCancel, saveLabel='儲存' }) {
-    return (
-      <div style={{border:'1.5px solid #E0D9CF',borderRadius:11,padding:14,display:'flex',flexDirection:'column',gap:9,background:'rgba(255,255,255,.8)'}}>
-        <input value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} placeholder="事件標題" />
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9}}>
-          <input type="time" value={form.time} onChange={e=>setForm(f=>({...f,time:e.target.value}))} />
-          <select value={form.owner} onChange={e=>setForm(f=>({...f,owner:e.target.value}))}>
-            <option value="apple">🍎 蘋果派</option>
-            <option value="pine">🌲 松果</option>
-            <option value="us">🤝 我們</option>
-          </select>
-        </div>
-        <select value={form.stress} onChange={e=>setForm(f=>({...f,stress:e.target.value}))}>
-          <option value="normal">一般</option>
-          <option value="high">🔴 高壓日</option>
-        </select>
-        <input value={form.tags} onChange={e=>setForm(f=>({...f,tags:e.target.value}))} placeholder="標籤（逗號分隔，如：出差,不回家,約會）" />
-        <input value={form.note} onChange={e=>setForm(f=>({...f,note:e.target.value}))} placeholder="備註（選填）" />
-        <div style={{display:'flex',gap:8}}>
-          <button onClick={onSave} className="btn-primary" style={{flex:1}}>{saveLabel}</button>
-          <button onClick={onCancel} className="btn-ghost">取消</button>
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -854,35 +892,35 @@ function DayModal({ dateKey, events, setEvents, onClose }) {
           <button onClick={onClose} style={{background:'none',border:'none',fontSize:18,color:'#A09688',cursor:'pointer'}}>×</button>
         </div>
 
-        {dayEvs.length===0&&!showAdd&&<p style={{fontSize:13,color:'#C0B8AE',textAlign:'center',padding:'14px 0'}}>這天還沒有事件</p>}
+        {dayEvs.length===0&&!showAdd&&!editId&&<p style={{fontSize:13,color:'#C0B8AE',textAlign:'center',padding:'14px 0'}}>這天還沒有事件</p>}
 
         <div style={{display:'flex',flexDirection:'column',gap:7,marginBottom:14}}>
-          {dayEvs.map(e=>{
-            const p=PEOPLE[e.owner]||PEOPLE.us;
-            if (editId===e.id) {
+          {dayEvs.map(ev=>{
+            const p=PEOPLE[ev.owner]||PEOPLE.us;
+            if (editId===ev.id) {
               return (
-                <div key={e.id}>
-                  <p style={{fontSize:11,color:'#A09688',marginBottom:6}}>編輯事件</p>
-                  <EventForm onSave={saveEdit} onCancel={()=>setEditId(null)} saveLabel="更新" />
+                <div key={ev.id}>
+                  <p style={{fontSize:11,color:'#A09688',marginBottom:6}}>✎ 編輯事件</p>
+                  <EventForm form={form} setForm={setForm} onSave={saveEdit} onCancel={()=>setEditId(null)} saveLabel="更新" />
                 </div>
               );
             }
             return (
-              <div key={e.id} style={{background:'rgba(255,255,255,.8)',border:'1.5px solid #E0D9CF',borderRadius:11,padding:'11px 13px'}}>
+              <div key={ev.id} style={{background:'rgba(255,255,255,.8)',border:'1.5px solid #E0D9CF',borderRadius:11,padding:'11px 13px'}}>
                 <div style={{display:'flex',alignItems:'flex-start',gap:8}}>
-                  <span style={{width:7,height:7,borderRadius:'50%',background:p.color,flexShrink:0,marginTop:5}}></span>
+                  <span style={{fontSize:14,flexShrink:0,marginTop:1}}>{p===PEOPLE.apple?'🍎':p===PEOPLE.pine?'🌲':'🤝'}</span>
                   <div style={{flex:1,minWidth:0}}>
-                    <p style={{fontSize:13,fontWeight:500,color:'#2D2820'}}>{e.title}</p>
+                    <p style={{fontSize:13,fontWeight:500,color:'#2D2820'}}>{ev.title}</p>
                     <p style={{fontSize:11,color:'#A09688',marginTop:2}}>
-                      {e.time} · {p.name}
-                      {e.stress==='high'?' · 🔴 高壓':''}
-                      {e.tags?.length?' · '+e.tags.join('、'):''}
+                      {ev.time} · {p.name}
+                      {ev.stress==='high'?' · 🔴 高壓':''}
+                      {ev.tags?.length?' · '+ev.tags.join('、'):''}
                     </p>
-                    {e.note&&<p style={{fontSize:11,color:'#7D7468',marginTop:2}}>{e.note}</p>}
+                    {ev.note&&<p style={{fontSize:11,color:'#7D7468',marginTop:2}}>{ev.note}</p>}
                   </div>
                   <div style={{display:'flex',gap:4,flexShrink:0}}>
-                    <button onClick={()=>startEdit(e)} style={{background:'none',border:'1px solid #E0D9CF',borderRadius:7,padding:'3px 8px',fontSize:11,color:'#A09688',cursor:'pointer'}}>編輯</button>
-                    <button onClick={()=>deleteEvent(e.id)} style={{background:'none',border:'1px solid rgba(192,136,122,.3)',borderRadius:7,padding:'3px 8px',fontSize:11,color:'#C0887A',cursor:'pointer'}}>刪除</button>
+                    <button onClick={()=>startEdit(ev)} style={{background:'none',border:'1px solid #E0D9CF',borderRadius:7,padding:'3px 8px',fontSize:11,color:'#A09688',cursor:'pointer'}}>編輯</button>
+                    <button onClick={()=>deleteEvent(ev.id)} style={{background:'none',border:'1px solid rgba(192,136,122,.3)',borderRadius:7,padding:'3px 8px',fontSize:11,color:'#C0887A',cursor:'pointer'}}>刪除</button>
                   </div>
                 </div>
               </div>
@@ -891,7 +929,7 @@ function DayModal({ dateKey, events, setEvents, onClose }) {
         </div>
 
         {showAdd
-          ? <EventForm onSave={saveAdd} onCancel={()=>setShowAdd(false)} saveLabel="新增" />
+          ? <EventForm form={form} setForm={setForm} onSave={saveAdd} onCancel={()=>setShowAdd(false)} saveLabel="新增事件" />
           : <button onClick={startAdd} style={{width:'100%',background:'none',border:'1.5px dashed #D8D0C4',borderRadius:11,padding:'11px',fontSize:13,color:'#A09688',cursor:'pointer'}}>＋ 新增事件</button>}
       </div>
     </div>
@@ -1057,8 +1095,21 @@ function MemoriesPage({ demData }) {
     <div className="page-scroll">
       <div style={{padding:'24px 24px 40px',maxWidth:680,margin:'0 auto'}}>
         <div style={{marginBottom:22}}>
-          <h2 style={{fontFamily:"'Noto Serif TC',serif",fontSize:19,fontWeight:400,color:'#2D2820',marginBottom:3}}>回憶牆</h2>
-          <p style={{fontSize:12,color:'#A09688'}}>共完成 {completed.length} 件事 · 永遠留在這裡</p>
+          <h2 style={{fontFamily:"'Noto Serif TC',serif",fontSize:19,fontWeight:400,color:'#2D2820',marginBottom:6}}>回憶牆 ✓</h2>
+          <p style={{fontSize:12,color:'#A09688',marginBottom:12}}>共完成 {completed.length} 件事 · 永遠留在這裡，讓努力被看見</p>
+          {/* Stats row */}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:8}}>
+            {[
+              { label:'全部完成', value:completed.length, color:'#2D4A3E' },
+              { label:'本週完成', value:completed.filter(a=>{const w=new Date();w.setDate(w.getDate()-7);return a.completedAt&&a.completedAt>=w.toISOString().slice(0,10);}).length, color:'#5A8F7B' },
+              { label:'人生領域', value:[...new Set(completed.map(a=>a.domainTitle))].length, color:'#8B7BAF' },
+            ].map(s=>(
+              <div key={s.label} className="card" style={{padding:'10px 12px',textAlign:'center'}}>
+                <p style={{fontSize:18,fontWeight:600,color:s.color,fontFamily:"'Noto Serif TC',serif"}}>{s.value}</p>
+                <p style={{fontSize:10,color:'#A09688',marginTop:2}}>{s.label}</p>
+              </div>
+            ))}
+          </div>
         </div>
         <div style={{columns:2,gap:12}}>
           {completed.map(a=>{
@@ -1282,7 +1333,10 @@ function App() {
     <div className="platform">
       {/* Sidebar */}
       <nav className="sidebar">
-        <div className="sidebar-brand">✦</div>
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3,marginBottom:8}}>
+          <div className="sidebar-brand" title="共同生活平台">✦</div>
+          <span style={{fontSize:9,color:'rgba(248,246,241,.55)',letterSpacing:'.04em',lineHeight:1.4,textAlign:'center'}}>🍎🌲<br/>🤝</span>
+        </div>
         {PAGES.map(p => (
           <button key={p.key} onClick={() => setPage(p.key)} className={`nav-btn${page===p.key?' active':''}`} title={p.label}>
             <span className="nav-icon">{p.icon}</span>
