@@ -149,10 +149,17 @@ function makeAction(title) {
 }
 
 function buildDefault() {
-  const domains = [
-    'IRC 內在真實練習圈','森林療癒','身心健康','關係經營',
-    '學習成長','財務工作','旅行探索','家與生活空間',
-  ].map(t => makeNode(t));
+  const domainDefs = [
+    { title:'IRC 內在真實練習圈', owner:'apple' },
+    { title:'森林療癒',           owner:'pine'  },
+    { title:'身心健康',           owner:'us'    },
+    { title:'關係經營',           owner:'us'    },
+    { title:'學習成長',           owner:'us'    },
+    { title:'財務工作',           owner:'us'    },
+    { title:'旅行探索',           owner:'us'    },
+    { title:'家與生活空間',       owner:'us'    },
+  ];
+  const domains = domainDefs.map(({ title, owner }) => ({ ...makeNode(title), owner }));
   const [irc,forest,health,relation,learning,finance,travel,home] = domains;
   const projects = {
     [irc.id]:      ['品牌建立','IRC 網站','年度盛會','SOF研究','引導員培育','課程設計','身體覺察','社群經營'].map(t=>makeNode(t)),
@@ -426,12 +433,23 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder }) {
 /* ════════════════════════════════════════════════════════
    DEM — DreamExpansionMap
 ════════════════════════════════════════════════════════ */
-function DreamExpansionMap({ data, setData, support, onSupportChange }) {
+function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) {
   const [stack, setStack]          = useState([{id:'dream',title:data.dream.title,depth:0}]);
   const [phase, setPhase]          = useState('idle');
   const [pendingStack, setPending] = useState(null);
   const [animating, setAnimating]  = useState(false);
   const [editTarget, setEditTarget] = useState(null);
+
+  // Jump to a specific domain when requested from Home page
+  useEffect(()=>{
+    if (!jumpTo?.domainId) return;
+    const dom = data.domains.find(d=>d.id===jumpTo.domainId);
+    if (!dom) return;
+    setStack([
+      {id:'dream', title:data.dream.title, depth:0},
+      {id:dom.id,  title:dom.title,        depth:1},
+    ]);
+  },[jumpTo]);
 
   const current    = stack[stack.length-1];
   const depthLabel = ['Life Domains','Projects','Actions'][current.depth]||'';
@@ -554,12 +572,13 @@ function DreamExpansionMap({ data, setData, support, onSupportChange }) {
 /* ════════════════════════════════════════════════════════
    HOME PAGE
 ════════════════════════════════════════════════════════ */
-function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage }) {
+function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage, onJumpDomain }) {
   const today   = todayKey();
   const weekEnd = new Date(); weekEnd.setDate(weekEnd.getDate()+7);
   const weekStr = weekEnd.toISOString().slice(0,10);
 
   const todayEvs    = calEvents.filter(e=>e.date===today);
+  const monthEvs    = calEvents.filter(e=>e.date.startsWith(today.slice(0,7))).sort((a,b)=>a.date.localeCompare(b.date));
   const upcomingEvs = calEvents.filter(e=>e.date>today&&e.date<=weekStr).sort((a,b)=>a.date.localeCompare(b.date));
 
   const allActions = useMemo(()=>{
@@ -574,115 +593,97 @@ function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage }) 
     return r;
   },[demData]);
 
-  const todayTodos = allActions.filter(a=>a.dueDate===today&&a.status!=='done');
-  const doingTodos = allActions.filter(a=>a.status==='doing');
+  const weekCounts = {
+    todo:  allActions.filter(a=>a.status==='todo').length,
+    doing: allActions.filter(a=>a.status==='doing').length,
+    done:  allActions.filter(a=>a.status==='done').length,
+  };
   const recentDone = allActions.filter(a=>a.status==='done').sort((a,b)=>(b.completedAt||'').localeCompare(a.completedAt||'')).slice(0,3);
-  const shownTodos = [...todayTodos,...doingTodos.filter(a=>!todayTodos.find(b=>b.id===a.id))].slice(0,5);
 
-  const domainProgress = useMemo(()=>demData.domains.map(dom=>{
-    const projs=demData.projects[dom.id]||[];
-    const acts=projs.flatMap(p=>demData.actions[p.id]||[]);
-    return {...dom,projCount:projs.length,actTotal:acts.length,actDone:acts.filter(a=>a.status==='done').length};
-  }),[demData]);
+  // Domain cards grouped by owner
+  const domainsByOwner = useMemo(()=>{
+    const groups = { apple:[], pine:[], us:[] };
+    demData.domains.forEach(dom=>{
+      const o = dom.owner||'us';
+      if (groups[o]) groups[o].push(dom);
+    });
+    return groups;
+  },[demData]);
 
-  function Section({ label, action, children }) {
+  function SectionHeader({ emoji, label, action }) {
     return (
-      <div style={{marginBottom:18}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:9}}>
-          <p style={{fontSize:10,color:'#A09688',letterSpacing:'.12em',textTransform:'uppercase'}}>{label}</p>
-          {action}
-        </div>
-        {children}
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:9}}>
+        <p style={{fontSize:12,fontWeight:500,color:'#2D2820',display:'flex',alignItems:'center',gap:5}}>
+          <span>{emoji}</span>{label}
+        </p>
+        {action}
       </div>
     );
   }
 
   return (
     <div className="page-scroll">
-      <div style={{padding:'20px 18px 44px',maxWidth:640,margin:'0 auto'}}>
+      <div style={{padding:'18px 16px 48px',maxWidth:640,margin:'0 auto'}}>
 
-        {/* Header */}
+        {/* ── Header ── */}
         <div style={{marginBottom:18}}>
           <p style={{fontSize:10,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:2}}>{todayLabel()}</p>
           <h1 style={{fontFamily:"'Noto Serif TC',serif",fontSize:19,fontWeight:400,color:'#2D2820'}}>早安，蘋果派 & 松果 ✦</h1>
         </div>
 
-        {/* Person status */}
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:18}}>
-          {[APPLE,PINE].map(p=>{
-            const st=todayStatus[p.key];
-            const isHigh=st.stress==='high';
-            const evs=todayEvs.filter(e=>e.owner===p.key||e.owner==='us');
-            return (
-              <div key={p.key} className="card" style={{padding:'13px 14px'}}>
-                <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:8}}>
-                  <span style={{width:8,height:8,borderRadius:'50%',background:p.color,display:'inline-block'}}></span>
-                  <span style={{fontSize:12,fontWeight:500,color:'#2D2820'}}>{p.name}</span>
-                  <span style={{marginLeft:'auto',fontSize:10,padding:'1px 7px',borderRadius:9,
-                    background:isHigh?'rgba(192,136,122,.12)':'rgba(91,163,123,.12)',
-                    color:isHigh?'#C0887A':'#5BA37B'}}>{isHigh?'🔴 高壓':'● 一般'}</span>
+        {/* ── 今日狀態 ── */}
+        <div style={{marginBottom:18}}>
+          <SectionHeader emoji="✨" label="今日狀態" />
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            {[APPLE,PINE].map(p=>{
+              const st=todayStatus[p.key], isHigh=st.stress==='high';
+              const evs=todayEvs.filter(e=>e.owner===p.key||e.owner==='us');
+              return (
+                <div key={p.key} className="card" style={{padding:'12px 14px'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:7}}>
+                    <span style={{width:8,height:8,borderRadius:'50%',background:p.color,display:'inline-block'}}></span>
+                    <span style={{fontSize:12,fontWeight:500,color:'#2D2820'}}>{p.name}</span>
+                    <span style={{marginLeft:'auto',fontSize:10,padding:'1px 6px',borderRadius:9,background:isHigh?'rgba(192,136,122,.12)':'rgba(91,163,123,.12)',color:isHigh?'#C0887A':'#5BA37B'}}>{isHigh?'🔴高壓':'●一般'}</span>
+                  </div>
+                  {evs.length===0?<p style={{fontSize:11,color:'#C0B8AE'}}>今天沒有安排</p>
+                    :evs.slice(0,2).map(e=><p key={e.id} style={{fontSize:11,color:'#7D7468',marginBottom:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>· {e.title}</p>)}
+                  <button onClick={()=>setTodayStatus(p.key,'stress',isHigh?'normal':'high')}
+                    style={{marginTop:8,fontSize:9,padding:'2px 7px',borderRadius:8,border:`1px solid ${isHigh?'#C0887A':'#E0D9CF'}`,background:'none',color:isHigh?'#C0887A':'#A09688',cursor:'pointer'}}>
+                    {isHigh?'切換為一般':'標記高壓'}
+                  </button>
                 </div>
-                {evs.length===0
-                  ?<p style={{fontSize:11,color:'#C0B8AE'}}>今天沒有安排</p>
-                  :evs.slice(0,2).map(e=><p key={e.id} style={{fontSize:11,color:'#7D7468',marginBottom:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>· {e.title}</p>)}
-                <button onClick={()=>setTodayStatus(p.key,'stress',isHigh?'normal':'high')}
-                  style={{marginTop:8,fontSize:9,padding:'2px 8px',borderRadius:8,border:`1px solid ${isHigh?'#C0887A':'#E0D9CF'}`,background:'none',color:isHigh?'#C0887A':'#A09688',cursor:'pointer'}}>
-                  {isHigh?'切換為一般':'標記高壓'}
-                </button>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
 
-        {/* Today todos */}
-        <Section label="今日 & 進行中" action={<button onClick={()=>setPage('projects')} style={{fontSize:10,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>全部 →</button>}>
-          {shownTodos.length===0
-            ?<p style={{fontSize:12,color:'#C0B8AE',padding:'8px 0'}}>沒有待辦項目</p>
-            :<div style={{display:'flex',flexDirection:'column',gap:5}}>
-              {shownTodos.map(a=>{
-                const asn=PEOPLE[a.assignee]||PEOPLE.us;
-                const sc=STATUS_COLOR[a.status];
-                return (
-                  <div key={a.id} className="card" style={{padding:'9px 12px',display:'flex',alignItems:'center',gap:8}}>
-                    <span style={{width:6,height:6,borderRadius:'50%',background:asn.color,flexShrink:0}}></span>
-                    <div style={{flex:1,minWidth:0}}>
-                      <p style={{fontSize:12,color:'#2D2820',fontWeight:500}}>{a.title}</p>
-                      <p style={{fontSize:10,color:'#A09688',marginTop:1}}>{a.domainTitle} › {a.projectTitle}</p>
-                    </div>
-                    <span style={{fontSize:10,padding:'2px 7px',borderRadius:8,background:sc.bg,color:sc.text,border:`1px solid ${sc.border}`,flexShrink:0}}>{STATUS_LABEL[a.status]}</span>
-                  </div>
-                );
-              })}
-            </div>}
-        </Section>
+        {/* ── 本週共同待辦 ── */}
+        <div style={{marginBottom:18}}>
+          <SectionHeader emoji="🟨" label="本週共同待辦" action={<button onClick={()=>setPage('projects')} style={{fontSize:10,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>看板 →</button>} />
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+            {[
+              {label:'待開始',count:weekCounts.todo,  color:'#A09688'},
+              {label:'進行中',count:weekCounts.doing, color:'#C07040'},
+              {label:'已完成',count:weekCounts.done,  color:'#2D4A3E'},
+            ].map(s=>(
+              <button key={s.label} onClick={()=>setPage('projects')} className="card"
+                style={{padding:'11px 12px',textAlign:'left',border:'none',cursor:'pointer',background:'rgba(255,255,255,.85)'}}>
+                <p style={{fontSize:18,fontWeight:600,color:s.color,fontFamily:"'Noto Serif TC',serif"}}>{s.count}</p>
+                <p style={{fontSize:10,color:'#A09688',marginTop:2}}>{s.label}</p>
+              </button>
+            ))}
+          </div>
+        </div>
 
-        {/* Today events */}
-        {todayEvs.length>0&&(
-          <Section label="今日行程">
-            <div style={{display:'flex',flexDirection:'column',gap:5}}>
-              {todayEvs.map(e=>{
-                const o=PEOPLE[e.owner]||PEOPLE.us;
-                return (
-                  <div key={e.id} className="card" style={{padding:'9px 12px',display:'flex',alignItems:'center',gap:8}}>
-                    <span style={{width:6,height:6,borderRadius:'50%',background:o.color,flexShrink:0}}></span>
-                    <div style={{flex:1,minWidth:0}}>
-                      <p style={{fontSize:12,color:'#2D2820',fontWeight:500}}>{e.title}</p>
-                      <p style={{fontSize:10,color:'#A09688',marginTop:1}}>{e.time&&`${e.time} · `}{o.name}{e.stress==='high'?' · 🔴 高壓':''}{e.tags?.length?' · '+e.tags.join('、'):''}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Section>
-        )}
-
-        {/* This week */}
-        {upcomingEvs.length>0&&(
-          <Section label="本週行程" action={<button onClick={()=>setPage('calendar')} style={{fontSize:10,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>月曆 →</button>}>
-            <div style={{display:'flex',flexDirection:'column',gap:5}}>
-              {upcomingEvs.slice(0,4).map(e=>{
+        {/* ── 本月重要事件 ── */}
+        {monthEvs.length>0&&(
+          <div style={{marginBottom:18}}>
+            <SectionHeader emoji="📅" label="本月重要事件" action={<button onClick={()=>setPage('calendar')} style={{fontSize:10,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>月曆 →</button>} />
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              {monthEvs.slice(0,5).map(e=>{
                 const o=PEOPLE[e.owner]||PEOPLE.us;
                 const [,mm,dd]=e.date.split('-');
+                const ownerEmoji=e.owner==='apple'?'🍎':e.owner==='pine'?'🌲':'🤝';
                 return (
                   <div key={e.id} className="card" style={{padding:'9px 12px',display:'flex',alignItems:'center',gap:10}}>
                     <div style={{width:32,height:32,borderRadius:7,background:'rgba(45,74,62,.07)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',flexShrink:0}}>
@@ -691,73 +692,89 @@ function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage }) 
                     </div>
                     <div style={{flex:1,minWidth:0}}>
                       <p style={{fontSize:12,color:'#2D2820',fontWeight:500}}>{e.title}</p>
-                      <p style={{fontSize:10,color:'#A09688',marginTop:1}}>{o.name}{e.tags?.length?' · '+e.tags.join('、'):''}</p>
-                    </div>
-                    {e.stress==='high'&&<span style={{fontSize:10,color:'#C0887A'}}>🔴</span>}
-                  </div>
-                );
-              })}
-            </div>
-          </Section>
-        )}
-
-        {/* Domain progress */}
-        {domainProgress.filter(d=>d.actTotal>0).length>0&&(
-          <Section label="人生領域進度" action={<button onClick={()=>setPage('dream')} style={{fontSize:10,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>夢想地圖 →</button>}>
-            <div style={{display:'flex',flexDirection:'column',gap:5}}>
-              {domainProgress.filter(d=>d.actTotal>0).map(dom=>{
-                const pct=Math.round(dom.actDone/dom.actTotal*100);
-                return (
-                  <div key={dom.id} className="card" style={{padding:'9px 12px'}}>
-                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:5}}>
-                      <p style={{fontSize:12,color:'#2D2820',fontWeight:500}}>{dom.title}</p>
-                      <p style={{fontSize:10,color:'#A09688'}}>{dom.actDone}/{dom.actTotal}</p>
-                    </div>
-                    <div style={{width:'100%',height:3,background:'rgba(180,172,160,.25)',borderRadius:3,overflow:'hidden'}}>
-                      <div style={{height:'100%',width:`${pct}%`,background:'#2D4A3E',borderRadius:3}}></div>
+                      <p style={{fontSize:10,color:'#A09688',marginTop:1}}>{ownerEmoji} {o.name}{e.stress==='high'?' · 🔴':''}{e.tags?.length?' · '+e.tags.join('、'):''}</p>
                     </div>
                   </div>
                 );
               })}
             </div>
-          </Section>
+          </div>
         )}
 
-        {/* Recently completed */}
-        {recentDone.length>0&&(
-          <Section label="最近完成 ✓" action={<button onClick={()=>setPage('memories')} style={{fontSize:10,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>回憶牆 →</button>}>
-            <div style={{display:'flex',flexDirection:'column',gap:5}}>
-              {recentDone.map(a=>{
-                const asn=PEOPLE[a.assignee]||PEOPLE.us;
-                return (
-                  <div key={a.id} className="card" style={{padding:'9px 12px',display:'flex',alignItems:'center',gap:8}}>
-                    <span style={{fontSize:11,color:'#2D4A3E'}}>✓</span>
-                    <div style={{flex:1,minWidth:0}}>
-                      <p style={{fontSize:12,color:'#2D2820',fontWeight:500}}>{a.title}</p>
-                      <p style={{fontSize:10,color:'#A09688',marginTop:1}}>{a.domainTitle} · {asn.name}</p>
+        {/* ── 人生夢想 ── */}
+        <div style={{marginBottom:18}}>
+          <SectionHeader emoji="🌱" label="人生夢想" action={<button onClick={()=>setPage('dream')} style={{fontSize:10,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>展開圖 →</button>} />
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+            {[
+              { key:'apple', emoji:'🍎', label:'蘋果派', color:'#E8956D', lightBg:'rgba(232,149,109,.06)' },
+              { key:'pine',  emoji:'🌲', label:'松果',   color:'#5A8F7B', lightBg:'rgba(90,143,123,.06)'  },
+              { key:'us',    emoji:'🤝', label:'我們',   color:'#8B7BAF', lightBg:'rgba(139,123,175,.06)' },
+            ].map(col=>{
+              const doms = domainsByOwner[col.key]||[];
+              return (
+                <div key={col.key} className="card" style={{padding:'10px 11px',background:col.lightBg}}>
+                  <p style={{fontSize:13,marginBottom:6}}>{col.emoji} <span style={{fontSize:11,color:'#2D2820',fontWeight:500}}>{col.label}</span></p>
+                  {doms.length===0
+                    ? <p style={{fontSize:10,color:'#C0B8AE'}}>尚無領域</p>
+                    : doms.map(dom=>(
+                      <button key={dom.id} onClick={()=>onJumpDomain(dom.id, dom.title)}
+                        style={{display:'block',width:'100%',textAlign:'left',background:'none',border:'none',cursor:'pointer',
+                          fontSize:11,color:'#3D3830',padding:'3px 0',lineHeight:1.5,
+                          borderBottom:'1px solid rgba(180,172,160,.15)'}}
+                        onMouseEnter={e=>e.target.style.color=col.color}
+                        onMouseLeave={e=>e.target.style.color='#3D3830'}>
+                        {dom.title}
+                      </button>
+                    ))}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── 最近完成 ── */}
+        <div style={{marginBottom:18}}>
+          <SectionHeader emoji="✅" label="最近完成" action={<button onClick={()=>setPage('memories')} style={{fontSize:10,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>回憶牆 →</button>} />
+          {recentDone.length===0
+            ? (
+              <button onClick={()=>setPage('projects')} className="card" style={{padding:'14px 16px',width:'100%',textAlign:'center',border:'none',cursor:'pointer',color:'#C0B8AE',fontSize:12,background:'rgba(255,255,255,.7)'}}>
+                完成一個行動，這裡就會出現記錄 →
+              </button>
+            ) : (
+              <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                {recentDone.map(a=>{
+                  const asn=PEOPLE[a.assignee]||PEOPLE.us;
+                  const ownerEmoji=a.assignee==='apple'?'🍎':a.assignee==='pine'?'🌲':'🤝';
+                  return (
+                    <div key={a.id} className="card" style={{padding:'9px 12px',display:'flex',alignItems:'center',gap:8}}>
+                      <span style={{fontSize:11,color:'#2D4A3E',flexShrink:0}}>✓</span>
+                      <div style={{flex:1,minWidth:0}}>
+                        <p style={{fontSize:12,color:'#2D2820',fontWeight:500}}>{a.title}</p>
+                        <p style={{fontSize:10,color:'#A09688',marginTop:1}}>{ownerEmoji} {a.domainTitle} › {a.projectTitle}</p>
+                      </div>
+                      {a.completedAt&&<span style={{fontSize:9,color:'#C0B8AE',flexShrink:0}}>{a.completedAt.slice(5)}</span>}
                     </div>
-                    {a.completedAt&&<span style={{fontSize:9,color:'#C0B8AE',flexShrink:0}}>{a.completedAt.slice(5)}</span>}
-                  </div>
-                );
-              })}
-            </div>
-          </Section>
-        )}
+                  );
+                })}
+              </div>
+            )}
+        </div>
 
-        {/* Dream Map entry */}
-        <button onClick={()=>setPage('dream')} style={{width:'100%',background:'#2D4A3E',border:'none',borderRadius:13,padding:'15px 18px',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer'}}
+        {/* ── Dream Map 入口 ── */}
+        <button onClick={()=>setPage('dream')} style={{width:'100%',background:'#2D4A3E',border:'none',borderRadius:13,padding:'14px 18px',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer'}}
           onMouseEnter={e=>e.currentTarget.style.background='#3A5F4E'} onMouseLeave={e=>e.currentTarget.style.background='#2D4A3E'}>
           <div style={{textAlign:'left'}}>
-            <p style={{fontFamily:"'Noto Serif TC',serif",fontSize:14,color:'#F8F6F1',fontWeight:400}}>人生夢想展開圖</p>
-            <p style={{fontSize:10,color:'rgba(248,246,241,.6)',marginTop:2}}>共創理想生活 · {demData.domains.length} 個人生領域</p>
+            <p style={{fontFamily:"'Noto Serif TC',serif",fontSize:13,color:'#F8F6F1',fontWeight:400}}>人生夢想展開圖</p>
+            <p style={{fontSize:10,color:'rgba(248,246,241,.55)',marginTop:2}}>共創理想生活 · {demData.domains.length} 個人生領域</p>
           </div>
-          <span style={{fontSize:20,color:'rgba(248,246,241,.65)'}}>✦ →</span>
+          <span style={{fontSize:18,color:'rgba(248,246,241,.6)'}}>✦ →</span>
         </button>
 
       </div>
     </div>
   );
 }
+
 
 /* ════════════════════════════════════════════════════════
    CALENDAR PAGE
@@ -939,129 +956,582 @@ function DayModal({ dateKey, events, setEvents, onClose }) {
 /* ════════════════════════════════════════════════════════
    PROJECTS PAGE
 ════════════════════════════════════════════════════════ */
-function ProjectsPage({ demData, setDemData }) {
-  const [filterDomain, setFilterDomain]     = useState('all');
-  const [filterAssignee, setFilterAssignee] = useState('all');
-  const [filterStatus, setFilterStatus]     = useState('todo,doing');
-  const [editAction, setEditAction]         = useState(null);
 
-  const allActions = useMemo(()=>{
-    const r=[];
-    demData.domains.forEach(dom=>{
-      if(filterDomain!=='all'&&dom.id!==filterDomain) return;
-      (demData.projects[dom.id]||[]).forEach(proj=>{
-        (demData.actions[proj.id]||[]).forEach(a=>{
-          r.push({...a,domainId:dom.id,domainTitle:dom.title,projectId:proj.id,projectTitle:proj.title});
-        });
+/* ════════════════════════════════════════════════════════
+   PROJECT HELPERS
+════════════════════════════════════════════════════════ */
+function getProjectStats(projectId, demData) {
+  const acts  = demData.actions[projectId] || [];
+  const total = acts.length;
+  const done  = acts.filter(a => a.status === 'done').length;
+  const next  = acts.find(a => a.status !== 'done') || null;
+  return { total, done, next };
+}
+
+function flattenProjects(demData) {
+  const r = [];
+  demData.domains.forEach(dom => {
+    (demData.projects[dom.id] || []).forEach(proj => {
+      r.push({
+        ...proj,
+        status:     proj.status    || 'todo',
+        owner:      proj.owner     || 'us',
+        dueDate:    proj.dueDate   || null,
+        domainId:   dom.id,
+        domainTitle:dom.title,
       });
     });
-    return r;
-  },[demData,filterDomain]);
-
-  const statuses = filterStatus.split(',');
-  const filtered = allActions.filter(a=>{
-    if(filterAssignee!=='all'&&a.assignee!==filterAssignee) return false;
-    return statuses.includes(a.status);
   });
+  return r;
+}
 
-  function updateAction(projectId, updated) {
-    setDemData(d=>({...d,actions:{...d.actions,[projectId]:(d.actions[projectId]||[]).map(a=>a.id===updated.id?updated:a)}}));
+function updateProjectInDem(setDemData, domainId, projectId, updates) {
+  setDemData(d => ({
+    ...d,
+    projects: {
+      ...d.projects,
+      [domainId]: (d.projects[domainId] || []).map(p =>
+        p.id === projectId ? { ...p, ...updates } : p
+      ),
+    },
+  }));
+}
+
+/* ════════════════════════════════════════════════════════
+   PROJECT DETAIL MODAL
+════════════════════════════════════════════════════════ */
+function ProjectDetailModal({ project, demData, setDemData, onClose }) {
+  const [form, setForm] = useState({
+    title:  project.title,
+    desc:   project.desc  || '',
+    owner:  project.owner || 'us',
+    dueDate:project.dueDate || '',
+    status: project.status || 'todo',
+  });
+  const [newAction, setNewAction] = useState('');
+  const actions = demData.actions[project.id] || [];
+  const { total, done } = getProjectStats(project.id, demData);
+  const pct = total > 0 ? Math.round(done / total * 100) : 0;
+  const todoActs = actions.filter(a => a.status !== 'done');
+  const doneActs = actions.filter(a => a.status === 'done');
+
+  function save() {
+    if (!form.title.trim()) return;
+    updateProjectInDem(setDemData, project.domainId, project.id, {
+      title: form.title.trim(), desc: form.desc,
+      owner: form.owner, dueDate: form.dueDate, status: form.status,
+    });
+    onClose();
+  }
+  function addAction() {
+    if (!newAction.trim()) return;
+    setDemData(d => ({
+      ...d,
+      actions: { ...d.actions, [project.id]: [...(d.actions[project.id]||[]), makeAction(newAction.trim())] },
+    }));
+    setNewAction('');
+  }
+  function toggleAction(id) {
+    setDemData(d => ({
+      ...d,
+      actions: {
+        ...d.actions,
+        [project.id]: (d.actions[project.id]||[]).map(a =>
+          a.id === id ? { ...a, status: a.status==='done'?'todo':'done', completedAt: a.status!=='done'?todayKey():null } : a
+        ),
+      },
+    }));
+  }
+  function deleteAction(id) {
+    setDemData(d => ({
+      ...d,
+      actions: { ...d.actions, [project.id]: (d.actions[project.id]||[]).filter(a => a.id!==id) },
+    }));
+  }
+  function deleteProject() {
+    if (!window.confirm('確定要刪除這個專案嗎？')) return;
+    setDemData(d => ({
+      ...d,
+      projects: { ...d.projects, [project.domainId]: (d.projects[project.domainId]||[]).filter(p => p.id!==project.id) },
+    }));
+    onClose();
   }
 
   return (
-    <div className="page-scroll">
-      <div style={{padding:'24px 24px 40px',maxWidth:680,margin:'0 auto'}}>
-        <h2 style={{fontFamily:"'Noto Serif TC',serif",fontSize:19,fontWeight:400,color:'#2D2820',marginBottom:16}}>專案 & 行動</h2>
-        <div style={{display:'flex',flexWrap:'wrap',gap:7,marginBottom:10}}>
-          <select value={filterDomain} onChange={e=>setFilterDomain(e.target.value)} style={{fontSize:12,padding:'6px 10px',borderRadius:9,border:'1.5px solid #E0D9CF',background:'#FFF',cursor:'pointer'}}>
-            <option value="all">所有領域</option>
-            {demData.domains.map(d=><option key={d.id} value={d.id}>{d.title}</option>)}
-          </select>
-          <select value={filterAssignee} onChange={e=>setFilterAssignee(e.target.value)} style={{fontSize:12,padding:'6px 10px',borderRadius:9,border:'1.5px solid #E0D9CF',background:'#FFF',cursor:'pointer'}}>
-            <option value="all">所有人</option>
-            <option value="apple">🍎 蘋果派</option>
-            <option value="pine">🌲 松果</option>
-            <option value="us">🤝 我們</option>
-          </select>
-          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{fontSize:12,padding:'6px 10px',borderRadius:9,border:'1.5px solid #E0D9CF',background:'#FFF',cursor:'pointer'}}>
-            <option value="todo,doing">待開始 & 進行中</option>
-            <option value="todo">待開始</option>
-            <option value="doing">進行中</option>
-            <option value="done">已完成</option>
-            <option value="todo,doing,done">全部</option>
-          </select>
+    <div onClick={onClose} style={{position:'fixed',inset:0,zIndex:100,background:'rgba(45,40,35,.25)',backdropFilter:'blur(6px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:'#FDFAF5',borderRadius:20,width:'100%',maxWidth:500,maxHeight:'88vh',overflow:'hidden',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(45,40,35,.18)',animation:'dialogIn .22s both'}}>
+        {/* Header */}
+        <div style={{padding:'18px 20px 12px',borderBottom:'1px solid #EDE8E0',flexShrink:0}}>
+          <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8,marginBottom:8}}>
+            <div style={{flex:1,minWidth:0}}>
+              <p style={{fontSize:10,color:'#A09688',marginBottom:4,letterSpacing:'.08em',textTransform:'uppercase'}}>{project.domainTitle}</p>
+              <input value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))}
+                style={{fontSize:16,fontWeight:500,color:'#2D2820',border:'none',background:'transparent',padding:0,width:'100%',outline:'none',fontFamily:'inherit'}} />
+            </div>
+            <button onClick={onClose} style={{background:'none',border:'none',fontSize:18,color:'#A09688',cursor:'pointer',flexShrink:0}}>×</button>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <div style={{flex:1,height:4,background:'rgba(180,172,160,.25)',borderRadius:4,overflow:'hidden'}}>
+              <div style={{height:'100%',width:`${pct}%`,background:'#2D4A3E',borderRadius:4,transition:'width .3s'}}></div>
+            </div>
+            <span style={{fontSize:11,color:'#A09688',flexShrink:0}}>{done}/{total}</span>
+          </div>
         </div>
-        <p style={{fontSize:11,color:'#A09688',marginBottom:14}}>共 {filtered.length} 個行動項目</p>
-        <div style={{display:'flex',flexDirection:'column',gap:9}}>
-          {filtered.length===0&&<div style={{textAlign:'center',padding:'40px 0',color:'#C0B8AE',fontSize:13}}>這個條件下沒有項目</div>}
-          {filtered.map(a=>{
-            const asn=PEOPLE[a.assignee]||PEOPLE.us;
-            const sc=STATUS_COLOR[a.status];
-            return (
-              <div key={a.id} className="card" style={{padding:'13px 15px'}}>
-                <div style={{display:'flex',alignItems:'flex-start',gap:10}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <p style={{fontSize:13,fontWeight:500,color:'#2D2820',marginBottom:2}}>{a.title}</p>
-                    <p style={{fontSize:11,color:'#A09688'}}>{a.domainTitle} › {a.projectTitle}</p>
-                    {a.desc&&<p style={{fontSize:12,color:'#7D7468',marginTop:4,lineHeight:1.6}}>{a.desc}</p>}
-                  </div>
-                  <span style={{fontSize:11,padding:'3px 9px',borderRadius:9,background:sc.bg,color:sc.text,border:`1px solid ${sc.border}`,flexShrink:0}}>{STATUS_LABEL[a.status]}</span>
-                </div>
-                <div style={{display:'flex',alignItems:'center',gap:7,marginTop:10,flexWrap:'wrap'}}>
-                  <span style={{display:'flex',alignItems:'center',gap:4,fontSize:11,color:'#A09688'}}><span style={{width:5,height:5,borderRadius:'50%',background:asn.color,display:'inline-block'}}></span>{asn.name}</span>
-                  {a.dueDate&&<span style={{fontSize:11,color:'#A09688'}}>· {a.dueDate}</span>}
-                  <div style={{marginLeft:'auto',display:'flex',gap:5}}>
-                    {a.status==='todo'&&<button onClick={()=>updateAction(a.projectId,{...a,status:'doing'})} style={{fontSize:11,padding:'3px 9px',borderRadius:7,border:'1px solid #E0D9CF',background:'none',color:'#7D7468',cursor:'pointer'}}>開始</button>}
-                    {a.status!=='done'&&<button onClick={()=>updateAction(a.projectId,{...a,status:'done',completedAt:todayKey()})} style={{fontSize:11,padding:'3px 9px',borderRadius:7,border:'1px solid rgba(45,74,62,.3)',background:'rgba(45,74,62,.08)',color:'#2D4A3E',cursor:'pointer'}}>完成 ✓</button>}
-                    {a.status==='done'&&<button onClick={()=>updateAction(a.projectId,{...a,status:'todo',completedAt:null})} style={{fontSize:11,padding:'3px 9px',borderRadius:7,border:'1px solid #E0D9CF',background:'none',color:'#A09688',cursor:'pointer'}}>重新開啟</button>}
-                    <button onClick={()=>setEditAction(a)} style={{fontSize:11,padding:'3px 9px',borderRadius:7,border:'1px solid #E0D9CF',background:'none',color:'#A09688',cursor:'pointer'}}>編輯</button>
-                  </div>
-                </div>
+
+        {/* Body */}
+        <div style={{overflowY:'auto',flex:1,padding:'14px 20px'}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:14}}>
+            {[
+              { label:'負責人', el:<select value={form.owner} onChange={e=>setForm(f=>({...f,owner:e.target.value}))} style={{fontSize:11,padding:'4px 6px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF',width:'100%'}}>
+                  <option value="apple">🍎 蘋果派</option><option value="pine">🌲 松果</option><option value="us">🤝 我們</option>
+                </select> },
+              { label:'截止日期', el:<input type="date" value={form.dueDate} onChange={e=>setForm(f=>({...f,dueDate:e.target.value}))} style={{fontSize:11,padding:'4px 6px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF',width:'100%'}} /> },
+              { label:'狀態', el:<select value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))} style={{fontSize:11,padding:'4px 6px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF',width:'100%'}}>
+                  <option value="todo">待開始</option><option value="doing">進行中</option><option value="done">已完成</option>
+                </select> },
+            ].map(({label,el})=>(
+              <div key={label}><p style={{fontSize:9,color:'#A09688',marginBottom:3}}>{label}</p>{el}</div>
+            ))}
+          </div>
+          <textarea value={form.desc} onChange={e=>setForm(f=>({...f,desc:e.target.value}))} rows={2} placeholder="專案備註…"
+            style={{fontSize:12,width:'100%',borderRadius:8,border:'1px solid #E0D9CF',padding:'8px 10px',resize:'none',fontFamily:'inherit',lineHeight:1.6,marginBottom:14}} />
+
+          {/* Actions */}
+          <p style={{fontSize:10,color:'#A09688',marginBottom:7,letterSpacing:'.08em',textTransform:'uppercase'}}>行動項目 · {total} 個</p>
+          <div style={{display:'flex',gap:6,marginBottom:8}}>
+            <input value={newAction} onChange={e=>setNewAction(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addAction()} placeholder="新增行動項目…"
+              style={{flex:1,fontSize:12,padding:'6px 10px',borderRadius:8,border:'1px solid #E0D9CF'}} />
+            <button onClick={addAction} style={{background:'#2D4A3E',color:'#F8F6F1',border:'none',borderRadius:8,padding:'6px 12px',fontSize:12,cursor:'pointer'}}>＋</button>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:8}}>
+            {todoActs.map(a=>(
+              <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'rgba(255,255,255,.6)',borderRadius:8,border:'1px solid rgba(180,172,160,.25)'}}>
+                <button onClick={()=>toggleAction(a.id)} style={{width:15,height:15,borderRadius:3,border:'1.5px solid #C8C0B4',background:'none',cursor:'pointer',flexShrink:0}}></button>
+                <span style={{flex:1,fontSize:12,color:'#2D2820'}}>{a.title}</span>
+                <button onClick={()=>deleteAction(a.id)} style={{background:'none',border:'none',fontSize:12,color:'#C8C0B4',cursor:'pointer'}}>×</button>
               </div>
-            );
-          })}
+            ))}
+          </div>
+          {doneActs.length>0&&(
+            <div style={{display:'flex',flexDirection:'column',gap:4}}>
+              <p style={{fontSize:10,color:'#C0B8AE',marginBottom:2}}>已完成 ({doneActs.length})</p>
+              {doneActs.map(a=>(
+                <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'rgba(45,74,62,.04)',borderRadius:8}}>
+                  <button onClick={()=>toggleAction(a.id)} style={{width:15,height:15,borderRadius:3,border:'none',background:'#2D4A3E',cursor:'pointer',flexShrink:0,color:'#F8F6F1',fontSize:9,display:'flex',alignItems:'center',justifyContent:'center'}}>✓</button>
+                  <span style={{flex:1,fontSize:12,color:'#A09688',textDecoration:'line-through'}}>{a.title}</span>
+                  <button onClick={()=>deleteAction(a.id)} style={{background:'none',border:'none',fontSize:12,color:'#C8C0B4',cursor:'pointer'}}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{padding:'10px 20px',borderTop:'1px solid #EDE8E0',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+          <button onClick={deleteProject} style={{background:'none',border:'none',fontSize:12,color:'#C0887A',cursor:'pointer',fontFamily:'inherit'}}>刪除專案</button>
+          <div style={{display:'flex',gap:7}}>
+            <button onClick={onClose} style={{background:'none',border:'1.5px solid #E0D9CF',borderRadius:9,padding:'6px 12px',fontSize:12,color:'#7D7468',cursor:'pointer'}}>取消</button>
+            <button onClick={save} style={{background:'#2D4A3E',color:'#F8F6F1',border:'none',borderRadius:9,padding:'6px 14px',fontSize:12,cursor:'pointer'}}>儲存</button>
+          </div>
         </div>
       </div>
-      {editAction&&(
-        <ActionEditModal action={editAction}
-          onSave={a=>{updateAction(a.projectId,{...a,completedAt:a.status==='done'?(a.completedAt||todayKey()):null});setEditAction(null);}}
-          onClose={()=>setEditAction(null)} />
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════
+   PROJECT CARD
+════════════════════════════════════════════════════════ */
+function ProjectCard({ project, demData, onOpen, onStatusChange, dragging, onDragStart, onDragEnd }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { total, done, next } = getProjectStats(project.id, demData);
+  const pct = total > 0 ? Math.round(done / total * 100) : 0;
+  const ownerEmoji = project.owner==='apple'?'🍎':project.owner==='pine'?'🌲':'🤝';
+
+  return (
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onClick={() => { if (!menuOpen) onOpen(); }}
+      style={{
+        background: dragging ? 'rgba(255,255,255,.6)' : 'rgba(255,255,255,.88)',
+        border: '1.5px solid rgba(180,172,160,.35)',
+        borderRadius: 12,
+        padding: '12px 13px',
+        cursor: 'grab',
+        transition: 'box-shadow .15s, transform .15s',
+        boxShadow: dragging ? '0 10px 28px rgba(45,40,35,.20)' : '0 1px 4px rgba(45,40,35,.06)',
+        transform: dragging ? 'scale(1.03) rotate(.8deg)' : 'scale(1)',
+        opacity: dragging ? .88 : 1,
+        userSelect: 'none',
+        position: 'relative',
+      }}
+    >
+      {/* Domain label */}
+      <p style={{fontSize:9,color:'#A09688',marginBottom:4,letterSpacing:'.06em',textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+        {project.domainTitle}
+      </p>
+
+      {/* Title + menu */}
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:4,marginBottom:8}}>
+        <p style={{fontSize:13,fontWeight:500,color:'#2D2820',lineHeight:1.4,flex:1}}>{project.title}</p>
+        <button onClick={e=>{e.stopPropagation();setMenuOpen(m=>!m);}}
+          style={{background:'none',border:'none',fontSize:15,color:'#C0B8AE',cursor:'pointer',padding:'0 2px',lineHeight:1,flexShrink:0}}>⋮</button>
+      </div>
+
+      {/* Context menu */}
+      {menuOpen && (
+        <div onClick={e=>e.stopPropagation()}
+          style={{position:'absolute',top:36,right:8,background:'#FDFAF5',border:'1px solid #E0D9CF',borderRadius:10,padding:'5px 0',zIndex:20,boxShadow:'0 4px 16px rgba(45,40,35,.14)',minWidth:110}}>
+          {['todo','doing','done'].map(s=>(
+            <button key={s} onClick={()=>{onStatusChange(s);setMenuOpen(false);}}
+              style={{display:'block',width:'100%',background:'none',border:'none',textAlign:'left',padding:'6px 13px',fontSize:11,color:project.status===s?'#2D4A3E':'#3D3830',cursor:'pointer',fontFamily:'inherit',fontWeight:project.status===s?600:400}}>
+              {project.status===s?'✓ ':''}{s==='todo'?'待開始':s==='doing'?'進行中':'已完成'}
+            </button>
+          ))}
+          <div style={{height:1,background:'#EDE8E0',margin:'3px 0'}}></div>
+          <button onClick={()=>{onOpen();setMenuOpen(false);}}
+            style={{display:'block',width:'100%',background:'none',border:'none',textAlign:'left',padding:'6px 13px',fontSize:11,color:'#3D3830',cursor:'pointer',fontFamily:'inherit'}}>
+            ✎ 編輯
+          </button>
+        </div>
+      )}
+
+      {/* Owner + due date */}
+      <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:total>0?8:0,flexWrap:'wrap'}}>
+        <span style={{fontSize:13}}>{ownerEmoji}</span>
+        {project.dueDate&&<span style={{fontSize:10,color:'#A09688'}}>📅 {project.dueDate.slice(5).replace('-','/')}</span>}
+      </div>
+
+      {/* Progress bar */}
+      {total > 0 && (
+        <div style={{marginBottom:next?7:0}}>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+            <span style={{fontSize:9,color:'#A09688'}}>進度</span>
+            <span style={{fontSize:9,color:'#A09688'}}>{done}/{total}</span>
+          </div>
+          <div style={{height:3,background:'rgba(180,172,160,.22)',borderRadius:3,overflow:'hidden'}}>
+            <div style={{height:'100%',width:`${pct}%`,background:'#2D4A3E',borderRadius:3}}></div>
+          </div>
+        </div>
+      )}
+
+      {/* Next action */}
+      {next && (
+        <p style={{fontSize:10,color:'#7D7468',marginTop:7,padding:'4px 8px',background:'rgba(180,172,160,.1)',borderRadius:6,lineHeight:1.4}}>
+          <span style={{color:'#A09688'}}>下一步 · </span>{next.title}
+        </p>
       )}
     </div>
   );
 }
 
-function ActionEditModal({ action, onSave, onClose }) {
-  const [form,setForm]=useState({...action});
+/* ════════════════════════════════════════════════════════
+   PROJECTS PAGE — Kanban
+════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════
+   ACTION HELPERS (for Kanban)
+════════════════════════════════════════════════════════ */
+function flattenActions(demData) {
+  const r = [];
+  demData.domains.forEach(dom => {
+    (demData.projects[dom.id]||[]).forEach(proj => {
+      (demData.actions[proj.id]||[]).forEach(a => {
+        r.push({
+          ...a,
+          domainId:   dom.id,
+          domainTitle:dom.title,
+          projectId:  proj.id,
+          projectTitle:proj.title,
+        });
+      });
+    });
+  });
+  return r;
+}
+
+function updateActionInDem(setDemData, projectId, actionId, updates) {
+  setDemData(d => ({
+    ...d,
+    actions: {
+      ...d.actions,
+      [projectId]: (d.actions[projectId]||[]).map(a =>
+        a.id === actionId ? {...a,...updates} : a
+      ),
+    },
+  }));
+}
+
+/* ── Action Card ── */
+function ActionCard({ action, onOpen, dragging, onDragStart, onDragEnd }) {
+  const ownerEmoji = action.assignee==='apple'?'🍎':action.assignee==='pine'?'🌲':'🤝';
   return (
-    <div onClick={onClose} style={{position:'fixed',inset:0,zIndex:100,background:'rgba(45,40,35,.22)',backdropFilter:'blur(6px)',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:'#FDFAF5',borderRadius:18,padding:'24px',width:'100%',maxWidth:380,animation:'dialogIn .2s both'}}>
-        <h3 style={{fontSize:14,fontWeight:500,color:'#2D2820',marginBottom:16}}>編輯行動</h3>
-        <div style={{display:'flex',flexDirection:'column',gap:10}}>
-          <input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="標題" />
-          <textarea value={form.desc||''} onChange={e=>setForm({...form,desc:e.target.value})} placeholder="描述（選填）" rows={2} />
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onClick={onOpen}
+      style={{
+        background: dragging?'rgba(255,255,255,.6)':'rgba(255,255,255,.88)',
+        border:'1.5px solid rgba(180,172,160,.32)',
+        borderRadius:10,
+        padding:'10px 12px',
+        cursor:'grab',
+        transition:'box-shadow .15s, transform .15s',
+        boxShadow: dragging?'0 8px 22px rgba(45,40,35,.18)':'0 1px 4px rgba(45,40,35,.05)',
+        transform: dragging?'scale(1.03) rotate(.6deg)':'scale(1)',
+        opacity: dragging?.88:1,
+        userSelect:'none',
+      }}
+    >
+      {/* Breadcrumb */}
+      <p style={{fontSize:9,color:'#A09688',marginBottom:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',letterSpacing:'.04em'}}>
+        {action.domainTitle} › {action.projectTitle}
+      </p>
+      {/* Title */}
+      <p style={{fontSize:12,fontWeight:500,color:'#2D2820',lineHeight:1.4,marginBottom:7}}>{action.title}</p>
+      {/* Meta */}
+      <div style={{display:'flex',alignItems:'center',gap:7,flexWrap:'wrap'}}>
+        <span style={{fontSize:12}}>{ownerEmoji}</span>
+        {action.dueDate&&<span style={{fontSize:9,color:'#A09688'}}>📅 {action.dueDate.slice(5).replace('-','/')}</span>}
+      </div>
+    </div>
+  );
+}
+
+/* ── Action Edit Modal ── */
+function ActionEditModal({ action, onSave, onClose }) {
+  const [form, setForm] = useState({
+    title:     action.title,
+    desc:      action.desc||'',
+    assignee:  action.assignee||'us',
+    dueDate:   action.dueDate||'',
+    status:    action.status||'todo',
+  });
+  function save() {
+    if (!form.title.trim()) return;
+    onSave({ ...action, ...form, title:form.title.trim() });
+    onClose();
+  }
+  return (
+    <div onClick={onClose} style={{position:'fixed',inset:0,zIndex:100,background:'rgba(45,40,35,.25)',backdropFilter:'blur(6px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:'#FDFAF5',borderRadius:18,padding:'22px',width:'100%',maxWidth:380,animation:'dialogIn .2s both'}}>
+        <h3 style={{fontSize:14,fontWeight:500,color:'#2D2820',marginBottom:14}}>編輯行動</h3>
+        <div style={{display:'flex',flexDirection:'column',gap:9}}>
+          <input value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} onKeyDown={e=>e.key==='Enter'&&save()} placeholder="行動名稱" />
+          <textarea value={form.desc} onChange={e=>setForm(f=>({...f,desc:e.target.value}))} placeholder="備註（選填）" rows={2} style={{fontSize:12,padding:'8px 10px',borderRadius:8,border:'1px solid #E0D9CF',resize:'none',fontFamily:'inherit',lineHeight:1.6}} />
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9}}>
-            <select value={form.assignee||'us'} onChange={e=>setForm({...form,assignee:e.target.value})}>
+            <select value={form.assignee} onChange={e=>setForm(f=>({...f,assignee:e.target.value}))} style={{fontSize:12,padding:'6px 8px',borderRadius:8,border:'1px solid #E0D9CF',background:'#FFF'}}>
               <option value="apple">🍎 蘋果派</option>
               <option value="pine">🌲 松果</option>
               <option value="us">🤝 我們</option>
             </select>
-            <input type="date" value={form.dueDate||''} onChange={e=>setForm({...form,dueDate:e.target.value})} />
+            <input type="date" value={form.dueDate} onChange={e=>setForm(f=>({...f,dueDate:e.target.value}))} style={{fontSize:12,padding:'6px 8px',borderRadius:8,border:'1px solid #E0D9CF',background:'#FFF'}} />
           </div>
-          <select value={form.status||'todo'} onChange={e=>setForm({...form,status:e.target.value})}>
+          <select value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))} style={{fontSize:12,padding:'6px 8px',borderRadius:8,border:'1px solid #E0D9CF',background:'#FFF'}}>
             <option value="todo">待開始</option>
             <option value="doing">進行中</option>
             <option value="done">已完成</option>
           </select>
         </div>
-        <div style={{display:'flex',gap:8,marginTop:16,justifyContent:'flex-end'}}>
-          <button onClick={onClose} className="btn-ghost" style={{padding:'7px 14px',fontSize:12}}>取消</button>
-          <button onClick={()=>onSave(form)} className="btn-primary" style={{padding:'7px 16px',fontSize:12}}>儲存</button>
+        <div style={{display:'flex',gap:8,marginTop:14,justifyContent:'flex-end'}}>
+          <button onClick={onClose} style={{background:'none',border:'1.5px solid #E0D9CF',borderRadius:8,padding:'6px 12px',fontSize:12,color:'#7D7468',cursor:'pointer'}}>取消</button>
+          <button onClick={save} style={{background:'#2D4A3E',color:'#F8F6F1',border:'none',borderRadius:8,padding:'6px 14px',fontSize:12,cursor:'pointer'}}>儲存</button>
         </div>
       </div>
     </div>
   );
 }
+
+/* ── Projects Page (Action Kanban) ── */
+function ProjectsPage({ demData, setDemData }) {
+  const [filterDomain,  setFilterDomain]  = useState('all');
+  const [filterOwner,   setFilterOwner]   = useState('all');
+  const [draggingId,    setDraggingId]    = useState(null);
+  const [dragOver,      setDragOver]      = useState(null);
+  const [editAction,    setEditAction]    = useState(null);
+  const [isMobile,      setIsMobile]      = useState(typeof window!=='undefined'&&window.innerWidth<640);
+  const [showAdd,       setShowAdd]       = useState(false);
+  const [newTitle,      setNewTitle]      = useState('');
+  const [newProjectId,  setNewProjectId]  = useState('');
+
+  useEffect(()=>{
+    const fn=()=>setIsMobile(window.innerWidth<640);
+    window.addEventListener('resize',fn);
+    return()=>window.removeEventListener('resize',fn);
+  },[]);
+
+  const allActions = useMemo(()=>flattenActions(demData),[demData]);
+  const filtered   = allActions.filter(a=>{
+    if (filterDomain!=='all'&&a.domainId!==filterDomain) return false;
+    if (filterOwner !=='all'&&(a.assignee||'us')!==filterOwner) return false;
+    return true;
+  });
+
+  const cols = {
+    todo:  filtered.filter(a=>(a.status||'todo')==='todo'),
+    doing: filtered.filter(a=>(a.status||'todo')==='doing'),
+    done:  filtered.filter(a=>(a.status||'todo')==='done'),
+  };
+
+  function changeStatus(action, status) {
+    updateActionInDem(setDemData, action.projectId, action.id, {
+      status,
+      completedAt: status==='done' ? todayKey() : null,
+    });
+  }
+
+  function handleDrop(status) {
+    if (!draggingId) return;
+    const act = allActions.find(a=>a.id===draggingId);
+    if (act) changeStatus(act, status);
+    setDraggingId(null); setDragOver(null);
+  }
+
+  function saveEditedAction(updated) {
+    updateActionInDem(setDemData, updated.projectId, updated.id, {
+      title: updated.title, desc: updated.desc,
+      assignee: updated.assignee, dueDate: updated.dueDate,
+      status: updated.status,
+      completedAt: updated.status==='done'?(updated.completedAt||todayKey()):null,
+    });
+  }
+
+  function deleteAction(action) {
+    if (!window.confirm('確定刪除這個行動嗎？')) return;
+    setDemData(d=>({
+      ...d,
+      actions:{...d.actions,[action.projectId]:(d.actions[action.projectId]||[]).filter(a=>a.id!==action.id)},
+    }));
+    setEditAction(null);
+  }
+
+  function addAction() {
+    if (!newTitle.trim()||!newProjectId) return;
+    const a = makeAction(newTitle.trim());
+    setDemData(d=>({...d,actions:{...d.actions,[newProjectId]:[...(d.actions[newProjectId]||[]),a]}}));
+    setNewTitle(''); setShowAdd(false);
+  }
+
+  // Flat project list for add dropdown
+  const allProjects = useMemo(()=>flattenProjects(demData),[demData]);
+
+  const colDef = [
+    { key:'todo',  label:'待開始', accent:'#A09688', borderTop:'2px solid rgba(160,150,136,.5)' },
+    { key:'doing', label:'進行中', accent:'#C07040', borderTop:'2px solid rgba(232,149,109,.6)' },
+    { key:'done',  label:'已完成', accent:'#2D4A3E', borderTop:'2px solid rgba(45,74,62,.5)'    },
+  ];
+
+  const FilterBar = ()=>(
+    <div style={{padding:'11px 14px',borderBottom:'1px solid #EDE8E0',flexShrink:0,display:'flex',alignItems:'center',gap:7,flexWrap:'wrap'}}>
+      <span style={{fontFamily:"'Noto Serif TC',serif",fontSize:15,fontWeight:400,color:'#2D2820',marginRight:4}}>行動看板</span>
+      <select value={filterDomain} onChange={e=>setFilterDomain(e.target.value)} style={{fontSize:11,padding:'3px 7px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF',cursor:'pointer'}}>
+        <option value="all">所有領域</option>
+        {demData.domains.map(d=><option key={d.id} value={d.id}>{d.title}</option>)}
+      </select>
+      <select value={filterOwner} onChange={e=>setFilterOwner(e.target.value)} style={{fontSize:11,padding:'3px 7px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF',cursor:'pointer'}}>
+        <option value="all">所有人</option>
+        <option value="apple">🍎 蘋果派</option>
+        <option value="pine">🌲 松果</option>
+        <option value="us">🤝 我們</option>
+      </select>
+      <span style={{marginLeft:'auto',fontSize:10,color:'#A09688'}}>{filtered.length} 個行動</span>
+      <button onClick={()=>setShowAdd(s=>!s)} style={{background:'#2D4A3E',color:'#F8F6F1',border:'none',borderRadius:7,padding:'4px 10px',fontSize:11,cursor:'pointer'}}>＋ 新增</button>
+    </div>
+  );
+
+  const AddRow = ()=> showAdd ? (
+    <div style={{padding:'9px 14px',borderBottom:'1px solid #EDE8E0',background:'rgba(45,74,62,.04)',flexShrink:0,display:'flex',gap:7,alignItems:'center',flexWrap:'wrap'}}>
+      <input value={newTitle} onChange={e=>setNewTitle(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addAction()} placeholder="行動名稱…" autoFocus
+        style={{fontSize:12,padding:'5px 9px',borderRadius:7,border:'1px solid #E0D9CF',flex:1,minWidth:100,fontFamily:'inherit'}} />
+      <select value={newProjectId} onChange={e=>setNewProjectId(e.target.value)} style={{fontSize:11,padding:'5px 7px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF'}}>
+        <option value="">選擇專案…</option>
+        {allProjects.map(p=><option key={p.id} value={p.id}>{p.domainTitle} › {p.title}</option>)}
+      </select>
+      <button onClick={addAction} style={{background:'#2D4A3E',color:'#F8F6F1',border:'none',borderRadius:7,padding:'5px 11px',fontSize:11,cursor:'pointer'}}>建立</button>
+      <button onClick={()=>setShowAdd(false)} style={{background:'none',border:'1px solid #E0D9CF',borderRadius:7,padding:'5px 8px',fontSize:11,color:'#A09688',cursor:'pointer'}}>取消</button>
+    </div>
+  ) : null;
+
+  /* Mobile: list by status */
+  if (isMobile) {
+    return (
+      <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
+        <FilterBar />
+        <AddRow />
+        <div className="page-scroll" style={{flex:1}}>
+          <div style={{padding:'10px 12px 40px',display:'flex',flexDirection:'column',gap:5}}>
+            {colDef.map(col=>(
+              <div key={col.key}>
+                <p style={{fontSize:10,color:col.accent,fontWeight:500,letterSpacing:'.06em',textTransform:'uppercase',padding:'6px 0 4px'}}>{col.label} · {cols[col.key].length}</p>
+                {cols[col.key].map(a=>(
+                  <div key={a.id} style={{marginBottom:5}}>
+                    <ActionCard action={a} onOpen={()=>setEditAction(a)} dragging={false} onDragStart={()=>{}} onDragEnd={()=>{}} />
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+        {editAction&&<ActionEditModal action={editAction} onSave={a=>{saveEditedAction(a);setEditAction(null);}} onClose={()=>setEditAction(null)} />}
+      </div>
+    );
+  }
+
+  /* Desktop: 3-column Kanban */
+  return (
+    <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
+      <FilterBar />
+      <AddRow />
+      <div style={{flex:1,display:'flex',overflow:'hidden'}}>
+        {colDef.map((col,ci)=>(
+          <div key={col.key}
+            onDragOver={e=>{e.preventDefault();setDragOver(col.key);}}
+            onDragLeave={()=>setDragOver(null)}
+            onDrop={()=>handleDrop(col.key)}
+            style={{
+              flex:1,display:'flex',flexDirection:'column',minWidth:0,
+              borderRight:ci<2?'1px solid #EDE8E0':'none',
+              background:dragOver===col.key?'rgba(45,74,62,.04)':'transparent',
+              transition:'background .15s',
+            }}
+          >
+            <div style={{padding:'10px 12px 8px',display:'flex',alignItems:'center',gap:5,flexShrink:0,borderBottom:col.borderTop}}>
+              <span style={{fontSize:11,fontWeight:500,color:col.accent,letterSpacing:'.04em'}}>{col.label}</span>
+              <span style={{fontSize:10,color:'#C0B8AE',background:'rgba(180,172,160,.16)',borderRadius:8,padding:'1px 6px'}}>{cols[col.key].length}</span>
+            </div>
+            <div style={{flex:1,overflowY:'auto',padding:'8px 9px',display:'flex',flexDirection:'column',gap:6}}>
+              {cols[col.key].map(a=>(
+                <ActionCard key={a.id} action={a} onOpen={()=>setEditAction(a)}
+                  dragging={draggingId===a.id}
+                  onDragStart={()=>setDraggingId(a.id)}
+                  onDragEnd={()=>{setDraggingId(null);setDragOver(null);}} />
+              ))}
+              {cols[col.key].length===0&&(
+                <div style={{textAlign:'center',padding:'28px 0',color:'#C0B8AE',fontSize:11}}>
+                  {col.key==='todo'?'暫無待開始行動':col.key==='doing'?'暫無進行中行動':'還沒有完成的行動'}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      {editAction&&(
+        <div onClick={()=>setEditAction(null)} style={{position:'fixed',inset:0,zIndex:100,background:'rgba(45,40,35,.22)',backdropFilter:'blur(6px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:'#FDFAF5',borderRadius:18,padding:'22px',width:'100%',maxWidth:380,animation:'dialogIn .2s both'}}>
+            <h3 style={{fontSize:14,fontWeight:500,color:'#2D2820',marginBottom:4}}>{editAction.title}</h3>
+            <p style={{fontSize:10,color:'#A09688',marginBottom:14}}>{editAction.domainTitle} › {editAction.projectTitle}</p>
+            <ActionEditModal action={editAction}
+              onSave={a=>{saveEditedAction(a);setEditAction(null);}}
+              onClose={()=>setEditAction(null)} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 /* ════════════════════════════════════════════════════════
    MEMORY WALL (Completed)
@@ -1251,6 +1721,12 @@ function SetupScreen() {
 ════════════════════════════════════════════════════════ */
 function App() {
   const [page, setPage] = useState('home');
+  const [dreamJump, setDreamJump] = useState(null);
+
+  function onJumpDomain(domainId, domainTitle) {
+    setDreamJump({ domainId, domainTitle, ts: Date.now() }); // ts forces useEffect to fire even if same domain
+    setPage('dream');
+  }
 
   const [state, setState] = useState(() => {
     const saved = lsLoad();
@@ -1348,8 +1824,8 @@ function App() {
 
       {/* Page content */}
       <div className="page-content">
-        {page==='home'     && <HomePage     demData={state.demData} calEvents={state.calEvents} todayStatus={state.todayStatus} setTodayStatus={setTodayStatus} setPage={setPage} />}
-        {page==='dream'    && <div style={{flex:1,display:'flex',overflow:'hidden'}}><DreamExpansionMap data={state.demData} setData={setDemData} support={state.support} onSupportChange={handleSupportChange} /></div>}
+        {page==='home'     && <HomePage     demData={state.demData} calEvents={state.calEvents} todayStatus={state.todayStatus} setTodayStatus={setTodayStatus} setPage={setPage} onJumpDomain={onJumpDomain} />}
+        {page==='dream'    && <div style={{flex:1,display:'flex',overflow:'hidden'}}><DreamExpansionMap data={state.demData} setData={setDemData} support={state.support} onSupportChange={handleSupportChange} jumpTo={dreamJump} /></div>}
         {page==='calendar' && <CalendarPage calEvents={state.calEvents} setCalEvents={setCalEvents} />}
         {page==='projects' && <ProjectsPage demData={state.demData} setDemData={setDemData} />}
         {page==='memories' && <MemoriesPage demData={state.demData} />}
