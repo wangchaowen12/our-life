@@ -135,6 +135,28 @@ const MONTHS = ['一月','二月','三月','四月','五月','六月','七月','
 const DAYS   = ['日','一','二','三','四','五','六'];
 
 /* ════════════════════════════════════════════════════════
+   DATA MIGRATION (old 4-layer → new 3-layer format)
+════════════════════════════════════════════════════════ */
+function migrateData(raw) {
+  // If no data, use defaults
+  if (!raw) return buildDefault();
+  try {
+    // Validate new format: projects must be a flat array
+    if (Array.isArray(raw.projects) && raw.dream) {
+      return raw; // already correct format, use as-is
+    }
+    // Old 4-layer format: has 'domains' array — just discard and use defaults
+    // (user has confirmed existing data is minimal, so fresh start is fine)
+    console.warn('舊版資料格式，已自動重設為預設資料');
+    return buildDefault();
+  } catch (e) {
+    console.error('migrateData error:', e);
+    return buildDefault();
+  }
+}
+
+
+/* ════════════════════════════════════════════════════════
    LOCAL STORAGE
 ════════════════════════════════════════════════════════ */
 const LS_KEY = 'apple-pine-v2';
@@ -154,7 +176,9 @@ function makeAction(title) {
 }
 
 function buildDefault() {
-  const domainDefs = [
+  // 3-layer: Dream → Project → Action
+  // Projects replace both old Domains and sub-Projects
+  const projectDefs = [
     { title:'IRC 內在真實練習圈', owner:'apple' },
     { title:'森林療癒',           owner:'pine'  },
     { title:'身心健康',           owner:'us'    },
@@ -164,23 +188,19 @@ function buildDefault() {
     { title:'旅行探索',           owner:'us'    },
     { title:'家與生活空間',       owner:'us'    },
   ];
-  const domains = domainDefs.map(({ title, owner }) => ({ ...makeNode(title), owner }));
-  const [irc,forest,health,relation,learning,finance,travel,home] = domains;
-  const projects = {
-    [irc.id]:      ['品牌建立','IRC 網站','年度盛會','SOF研究','引導員培育','課程設計','身體覺察','社群經營'].map(t=>makeNode(t)),
-    [forest.id]:   ['森林工作坊','自然教育','森林探勘','森林旅行','合作夥伴','裝備','品牌建立','森林課程'].map(t=>makeNode(t)),
-    [health.id]:   ['空中瑜伽','Feldenkrais','運動','睡眠','飲食','身體保養','情緒照顧','休息'].map(t=>makeNode(t)),
-    [relation.id]: ['深度對話','約會','共同決策','衝突修復','傾聽','陪伴','家庭','朋友'].map(t=>makeNode(t)),
-    [learning.id]: ['閱讀','課程','研究','寫作','海外學習','反思','創作','AI工具'].map(t=>makeNode(t)),
-    [finance.id]:  ['收入','投資','儲蓄','工作安排','事業規劃','共同預算','保險','退休規劃'].map(t=>makeNode(t)),
-    [travel.id]:   ['京都','大阪','森林旅行','淡蘭古道','海外旅行','文化探索','攝影','自由旅行'].map(t=>makeNode(t)),
-    [home.id]:     ['整理收納','工作室','生活儀式','居住品質','家具','植物','居家修繕','共同空間'].map(t=>makeNode(t)),
-  };
-  const eventProj = projects[irc.id].find(p=>p.title==='年度盛會');
+  const projects = projectDefs.map(({ title, owner }) => ({ ...makeNode(title), owner, status:'todo' }));
+  const [irc,forest,health,relation,learning,finance,travel,home] = projects;
   const actions = {
-    [eventProj.id]: ['找場地','招募協作者','宣傳','活動流程','講者邀請','教材準備','預算','志工招募'].map(t=>makeAction(t)),
+    [irc.id]:      ['品牌建立','IRC 網站','年度盛會','SOF研究','引導員培育','課程設計','身體覺察','社群經營'].map(t=>makeAction(t)),
+    [forest.id]:   ['森林工作坊','自然教育','森林探勘','森林旅行','合作夥伴','裝備','品牌建立','森林課程'].map(t=>makeAction(t)),
+    [health.id]:   ['空中瑜伽','Feldenkrais','運動','睡眠','飲食','身體保養','情緒照顧','休息'].map(t=>makeAction(t)),
+    [relation.id]: ['深度對話','約會','共同決策','衝突修復','傾聽','陪伴','家庭','朋友'].map(t=>makeAction(t)),
+    [learning.id]: ['閱讀','課程','研究','寫作','海外學習','反思','創作','AI工具'].map(t=>makeAction(t)),
+    [finance.id]:  ['收入','投資','儲蓄','工作安排','事業規劃','共同預算','保險','退休規劃'].map(t=>makeAction(t)),
+    [travel.id]:   ['京都','大阪','森林旅行','淡蘭古道','海外旅行','文化探索','攝影','自由旅行'].map(t=>makeAction(t)),
+    [home.id]:     ['整理收納','工作室','生活儀式','居住品質','家具','植物','居家修繕','共同空間'].map(t=>makeAction(t)),
   };
-  return { dream:makeNode('共創理想生活'), domains, projects, actions };
+  return { dream:makeNode('共創理想生活'), projects, actions };
 }
 
 function buildDefaultState() {
@@ -324,7 +344,7 @@ function EditDialog({ node, layer, onSave, onDelete, onClose, support, onSupport
                 <input ref={titleRef} value={title} onChange={e=>setTitle(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSave()} placeholder="節點名稱…" />
               </div>
               {/* Show owner for domain / project nodes (layer passed via editTarget) */}
-              {(layer==='domains'||layer==='projects') && (
+              {layer==='projects' && (
                 <div>
                   <label style={{display:'block',fontSize:10,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:5}}>負責人</label>
                   <select value={owner} onChange={e=>setOwner(e.target.value)} style={{fontSize:13,padding:'9px 12px',borderRadius:10,border:'1.5px solid #E0D9CF',background:'#FFF',width:'100%',fontFamily:'inherit'}}>
@@ -473,7 +493,7 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder }) {
         >
           {/* Image overlay */}
           {node.image && (
-            <div style={{position:'absolute',inset:0,borderRadius:'50%',overflow:'hidden',opacity:hovered?.18:.07,transition:'opacity .2s'}}>
+            <div style={{position:'absolute',inset:0,borderRadius:'50%',overflow:'hidden',opacity:hovered?.50:.28,transition:'opacity .2s'}}>
               <img src={node.image} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}} onError={()=>{}}/>
             </div>
           )}
@@ -525,45 +545,38 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
   const [animating, setAnimating]  = useState(false);
   const [editTarget, setEditTarget] = useState(null);
 
-  // Jump to a specific domain when requested from Home page
+  // Jump to a specific project when requested from Home page
   useEffect(()=>{
-    if (!jumpTo?.domainId) return;
-    const dom = data.domains.find(d=>d.id===jumpTo.domainId);
-    if (!dom) return;
+    if (!jumpTo?.projectId) return;
+    const proj = (data.projects||[]).find(p=>p.id===jumpTo.projectId);
+    if (!proj) return;
     setStack([
       {id:'dream', title:data.dream.title, depth:0},
-      {id:dom.id,  title:dom.title,        depth:1},
+      {id:proj.id, title:proj.title,       depth:1},
     ]);
   },[jumpTo]);
 
   const current    = stack[stack.length-1];
-  const depthLabel = ['Life Domains','Projects','Actions'][current.depth]||'';
+  const depthLabel = ['專案','行動'][current.depth]||'';
 
   const getList = useCallback((id,depth)=>{
-    if(depth===0) return data.domains;
-    if(depth===1) return data.projects[id]||[];
-    if(depth===2) return data.actions[id]||[];
+    if(depth===0) return Array.isArray(data.projects)?data.projects:[];  // guard: flat array only
+    if(depth===1) return data.actions[id]||[];
     return [];
   },[data]);
 
   const children = useMemo(()=>{
     const list = getList(current.id, current.depth);
     if (current.depth===0) {
-      return list.map(dom=>{
-        const projs  = data.projects[dom.id]||[];
-        const acts   = projs.flatMap(p=>data.actions[p.id]||[]);
-        const actDone= acts.filter(a=>a.status==='done').length;
-        return {...dom, _projCount:projs.length, _actCount:acts.length, _actDone:actDone, _owner:dom.owner||'us'};
-      });
-    }
-    if (current.depth===1) {
+      // Projects: enrich with action count + done count
       return list.map(proj=>{
         const acts   = data.actions[proj.id]||[];
         const actDone= acts.filter(a=>a.status==='done').length;
         return {...proj, _actCount:acts.length, _actDone:actDone, _owner:proj.owner||'us'};
       });
     }
-    return list;
+    // depth 1: actions — just return as-is with owner hint
+    return list.map(a=>({...a, _owner:a.assignee||'us'}));
   },[getList, current, data]);
   const slots = [...children,...Array(Math.max(0,8-children.length)).fill(null)].slice(0,9);
   const positions = orbitPositions(slots.length);
@@ -574,15 +587,14 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
     if(phase==='enter'){ const t=setTimeout(()=>{ setPhase('idle'); setAnimating(false); setPending(null); },420); return()=>clearTimeout(t); }
   },[phase,pendingStack]);
 
-  const zoomIn = useCallback((node)=>{ if(current.depth>=2) return; navigate([...stack,{id:node.id,title:node.title,depth:current.depth+1}]); },[stack,current,navigate]);
+  const zoomIn = useCallback((node)=>{ if(current.depth>=1) return; navigate([...stack,{id:node.id,title:node.title,depth:current.depth+1}]); },[stack,current,navigate]);
   const zoomTo = useCallback((idx)=>{ if(idx===stack.length-1) return; navigate(stack.slice(0,idx+1)); },[stack,navigate]);
 
   const updateNode = useCallback((layer,parentId,updated)=>{
     setData(d=>{
-      if(layer==='dream') return{...d,dream:updated};
-      if(layer==='domains') return{...d,domains:d.domains.map(n=>n.id===updated.id?updated:n)};
-      if(layer==='projects') return{...d,projects:{...d.projects,[parentId]:(d.projects[parentId]||[]).map(n=>n.id===updated.id?updated:n)}};
-      if(layer==='actions') return{...d,actions:{...d.actions,[parentId]:(d.actions[parentId]||[]).map(n=>n.id===updated.id?updated:n)}};
+      if(layer==='dream')    return{...d,dream:updated};
+      if(layer==='projects') return{...d,projects:(d.projects||[]).map(n=>n.id===updated.id?updated:n)};
+      if(layer==='actions')  return{...d,actions:{...d.actions,[parentId]:(d.actions[parentId]||[]).map(n=>n.id===updated.id?updated:n)}};
       return d;
     });
     setStack(s=>s.map(item=>item.id===updated.id?{...item,title:updated.title}:item));
@@ -590,26 +602,24 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
 
   const deleteNode = useCallback((layer,parentId,id)=>{
     setData(d=>{
-      if(layer==='domains') return{...d,domains:d.domains.filter(n=>n.id!==id)};
-      if(layer==='projects') return{...d,projects:{...d.projects,[parentId]:(d.projects[parentId]||[]).filter(n=>n.id!==id)}};
-      if(layer==='actions') return{...d,actions:{...d.actions,[parentId]:(d.actions[parentId]||[]).filter(n=>n.id!==id)}};
+      if(layer==='projects') return{...d,projects:(d.projects||[]).filter(n=>n.id!==id)};
+      if(layer==='actions')  return{...d,actions:{...d.actions,[parentId]:(d.actions[parentId]||[]).filter(n=>n.id!==id)}};
       return d;
     });
     setStack(s=>{ const i=s.findIndex(item=>item.id===id); return i>-1?s.slice(0,i):s; });
   },[setData]);
 
   const addNode = useCallback((layer,parentId)=>{
-    const n = layer==='actions' ? makeAction('新節點') : makeNode('新節點');
+    const n = layer==='actions' ? makeAction('新節點') : {...makeNode('新節點'),owner:'us',status:'todo'};
     setData(d=>{
-      if(layer==='domains') return{...d,domains:[...d.domains,n]};
-      if(layer==='projects') return{...d,projects:{...d.projects,[parentId]:[...(d.projects[parentId]||[]),n]}};
-      if(layer==='actions') return{...d,actions:{...d.actions,[parentId]:[...(d.actions[parentId]||[]),n]}};
+      if(layer==='projects') return{...d,projects:[...(d.projects||[]),n]};
+      if(layer==='actions')  return{...d,actions:{...d.actions,[parentId]:[...(d.actions[parentId]||[]),n]}};
       return d;
     });
     setTimeout(()=>setEditTarget({node:n,layer,parentId}),50);
   },[setData]);
 
-  const currentLayer = current.depth===0?'domains':current.depth===1?'projects':'actions';
+  const currentLayer = current.depth===0?'projects':'actions';
 
   return (
     <div style={{flex:1,position:'relative',display:'flex',flexDirection:'column',fontFamily:"'Noto Sans TC','PingFang TC',system-ui,sans-serif",overflow:'hidden',userSelect:'none'}}>
@@ -671,7 +681,7 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
 /* ════════════════════════════════════════════════════════
    HOME PAGE
 ════════════════════════════════════════════════════════ */
-function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage, onJumpDomain }) {
+function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage, onJumpProject }) {
   const today   = todayKey();
   const weekEnd = new Date(); weekEnd.setDate(weekEnd.getDate()+7);
   const weekStr = weekEnd.toISOString().slice(0,10);
@@ -683,11 +693,9 @@ function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage, on
 
   const allActions = useMemo(()=>{
     const r=[];
-    demData.domains.forEach(dom=>{
-      (demData.projects[dom.id]||[]).forEach(proj=>{
-        (demData.actions[proj.id]||[]).forEach(a=>{
-          r.push({...a,domainTitle:dom.title,projectTitle:proj.title});
-        });
+    (demData.projects||[]).forEach(proj=>{
+      (demData.actions[proj.id]||[]).forEach(a=>{
+        r.push({...a,domainTitle:proj.title,projectTitle:proj.title});
       });
     });
     return r;
@@ -701,11 +709,11 @@ function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage, on
   const recentDone = allActions.filter(a=>a.status==='done').sort((a,b)=>(b.completedAt||'').localeCompare(a.completedAt||'')).slice(0,3);
 
   // Domain cards grouped by owner
-  const domainsByOwner = useMemo(()=>{
+  const projectsByOwner = useMemo(()=>{
     const groups = { apple:[], pine:[], us:[] };
-    demData.domains.forEach(dom=>{
-      const o = dom.owner||'us';
-      if (groups[o]) groups[o].push(dom);
+    (demData.projects||[]).forEach(proj=>{
+      const o = proj.owner||'us';
+      if (groups[o]) groups[o].push(proj);
     });
     return groups;
   },[demData]);
@@ -820,14 +828,14 @@ function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage, on
               { key:'pine',  emoji:'🌲', label:'松果',   color:'#5A8F7B', lightBg:'rgba(90,143,123,.06)'  },
               { key:'us',    emoji:'🤝', label:'我們',   color:'#8B7BAF', lightBg:'rgba(139,123,175,.06)' },
             ].map(col=>{
-              const doms = domainsByOwner[col.key]||[];
+              const doms = projectsByOwner[col.key]||[];
               return (
                 <div key={col.key} className="card" style={{padding:'10px 11px',background:col.lightBg}}>
                   <p style={{fontSize:13,marginBottom:6}}>{col.emoji} <span style={{fontSize:11,color:'#2D2820',fontWeight:500}}>{col.label}</span></p>
                   {doms.length===0
                     ? <p style={{fontSize:10,color:'#C0B8AE'}}>尚無領域</p>
                     : doms.map(dom=>(
-                      <button key={dom.id} onClick={()=>onJumpDomain(dom.id, dom.title)}
+                      <button key={dom.id} onClick={()=>onJumpProject(dom.id, dom.title)}
                         style={{display:'block',width:'100%',textAlign:'left',background:'none',border:'none',cursor:'pointer',
                           fontSize:11,color:'#3D3830',padding:'3px 0',lineHeight:1.5,
                           borderBottom:'1px solid rgba(180,172,160,.15)'}}
@@ -875,7 +883,7 @@ function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage, on
           onMouseEnter={e=>e.currentTarget.style.background='#3A5F4E'} onMouseLeave={e=>e.currentTarget.style.background='#2D4A3E'}>
           <div style={{textAlign:'left'}}>
             <p style={{fontFamily:"'Noto Serif TC',serif",fontSize:13,color:'#F8F6F1',fontWeight:400}}>人生夢想展開圖</p>
-            <p style={{fontSize:10,color:'rgba(248,246,241,.55)',marginTop:2}}>共創理想生活 · {demData.domains.length} 個人生領域</p>
+            <p style={{fontSize:10,color:'rgba(248,246,241,.55)',marginTop:2}}>共創理想生活 · {(demData.projects||[]).length} 個專案</p>
           </div>
           <span style={{fontSize:18,color:'rgba(248,246,241,.6)'}}>✦ →</span>
         </button>
@@ -1113,31 +1121,20 @@ function getProjectStats(projectId, demData) {
 }
 
 function flattenProjects(demData) {
-  const r = [];
-  demData.domains.forEach(dom => {
-    (demData.projects[dom.id] || []).forEach(proj => {
-      r.push({
-        ...proj,
-        status:     proj.status    || 'todo',
-        owner:      proj.owner     || 'us',
-        dueDate:    proj.dueDate   || null,
-        domainId:   dom.id,
-        domainTitle:dom.title,
-      });
-    });
-  });
-  return r;
+  return (demData.projects||[]).map(p => ({
+    ...p,
+    domainId:    p.id,
+    domainTitle: p.title,
+    status:      p.status||'todo',
+    owner:       p.owner||'us',
+  }));
 }
 
-function updateProjectInDem(setDemData, domainId, projectId, updates) {
+
+function updateProjectInDem(setDemData, projectId, updates) {
   setDemData(d => ({
     ...d,
-    projects: {
-      ...d.projects,
-      [domainId]: (d.projects[domainId] || []).map(p =>
-        p.id === projectId ? { ...p, ...updates } : p
-      ),
-    },
+    projects: (d.projects||[]).map(p => p.id===projectId ? {...p,...updates} : p),
   }));
 }
 
@@ -1161,7 +1158,7 @@ function ProjectDetailModal({ project, demData, setDemData, onClose }) {
 
   function save() {
     if (!form.title.trim()) return;
-    updateProjectInDem(setDemData, project.domainId, project.id, {
+    updateProjectInDem(setDemData, project.id, {
       title: form.title.trim(), desc: form.desc,
       owner: form.owner, dueDate: form.dueDate, status: form.status,
     });
@@ -1196,7 +1193,7 @@ function ProjectDetailModal({ project, demData, setDemData, onClose }) {
     if (!window.confirm('確定要刪除這個專案嗎？')) return;
     setDemData(d => ({
       ...d,
-      projects: { ...d.projects, [project.domainId]: (d.projects[project.domainId]||[]).filter(p => p.id!==project.id) },
+      projects: (d.projects||[]).filter(p => p.id!==project.id),
     }));
     onClose();
   }
@@ -1379,21 +1376,21 @@ function ProjectCard({ project, demData, onOpen, onStatusChange, dragging, onDra
 ════════════════════════════════════════════════════════ */
 function flattenActions(demData) {
   const r = [];
-  demData.domains.forEach(dom => {
-    (demData.projects[dom.id]||[]).forEach(proj => {
-      (demData.actions[proj.id]||[]).forEach(a => {
-        r.push({
-          ...a,
-          domainId:   dom.id,
-          domainTitle:dom.title,
-          projectId:  proj.id,
-          projectTitle:proj.title,
-        });
+  (demData.projects||[]).forEach(proj => {
+    (demData.actions[proj.id]||[]).forEach(a => {
+      r.push({
+        ...a,
+        domainId:     proj.id,
+        domainTitle:  proj.title,
+        projectId:    proj.id,
+        projectTitle: proj.title,
+        projectOwner: proj.owner||'us',
       });
     });
   });
   return r;
 }
+
 
 function updateActionInDem(setDemData, projectId, actionId, updates) {
   setDemData(d => ({
@@ -1571,8 +1568,8 @@ function ProjectsPage({ demData, setDemData }) {
     <div style={{padding:'11px 14px',borderBottom:'1px solid #EDE8E0',flexShrink:0,display:'flex',alignItems:'center',gap:7,flexWrap:'wrap'}}>
       <span style={{fontFamily:"'Noto Serif TC',serif",fontSize:15,fontWeight:400,color:'#2D2820',marginRight:4}}>行動看板</span>
       <select value={filterDomain} onChange={e=>setFilterDomain(e.target.value)} style={{fontSize:11,padding:'3px 7px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF',cursor:'pointer'}}>
-        <option value="all">所有領域</option>
-        {demData.domains.map(d=><option key={d.id} value={d.id}>{d.title}</option>)}
+        <option value="all">所有專案</option>
+        {(demData.projects||[]).map(p=><option key={p.id} value={p.id}>{p.title}</option>)}
       </select>
       <select value={filterOwner} onChange={e=>setFilterOwner(e.target.value)} style={{fontSize:11,padding:'3px 7px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF',cursor:'pointer'}}>
         <option value="all">所有人</option>
@@ -1591,7 +1588,7 @@ function ProjectsPage({ demData, setDemData }) {
         style={{fontSize:12,padding:'5px 9px',borderRadius:7,border:'1px solid #E0D9CF',flex:1,minWidth:100,fontFamily:'inherit'}} />
       <select value={newProjectId} onChange={e=>setNewProjectId(e.target.value)} style={{fontSize:11,padding:'5px 7px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF'}}>
         <option value="">選擇專案…</option>
-        {allProjects.map(p=><option key={p.id} value={p.id}>{p.domainTitle} › {p.title}</option>)}
+        {allProjects.map(p=><option key={p.id} value={p.id}>{p.title}</option>)}
       </select>
       <button onClick={addAction} style={{background:'#2D4A3E',color:'#F8F6F1',border:'none',borderRadius:7,padding:'5px 11px',fontSize:11,cursor:'pointer'}}>建立</button>
       <button onClick={()=>setShowAdd(false)} style={{background:'none',border:'1px solid #E0D9CF',borderRadius:7,padding:'5px 8px',fontSize:11,color:'#A09688',cursor:'pointer'}}>取消</button>
@@ -1681,90 +1678,287 @@ function ProjectsPage({ demData, setDemData }) {
    MEMORY WALL (Completed)
 ════════════════════════════════════════════════════════ */
 function MemoriesPage({ demData }) {
-  const completed = useMemo(()=>{
-    const r=[];
-    demData.domains.forEach(dom=>{
-      (demData.projects[dom.id]||[]).forEach(proj=>{
-        (demData.actions[proj.id]||[]).forEach(a=>{
-          if(a.status==='done') r.push({...a,domainTitle:dom.title,projectTitle:proj.title,domainImage:dom.image,projectImage:proj.image});
-        });
+  const [selected, setSelected] = useState(null);
+  const [zoom, setZoom]         = useState(1);
+  const [pinchRef, setPinchRef] = useState(null);
+
+  /* ── Completion stats ── */
+  const projectStats = useMemo(() => (demData.projects||[]).map(proj => {
+    const acts    = demData.actions[proj.id]||[];
+    const actDone = acts.filter(a=>a.status==='done').length;
+    const done    = acts.length > 0 ? actDone===acts.length : proj.status==='done';
+    return { ...proj, acts, actDone, actTotal:acts.length, completed:done };
+  }), [demData]);
+
+  const dreamDone = projectStats.length > 0 && projectStats.every(p=>p.completed);
+
+  /* ── Build 9×9 mandala grid (2-level: Dream→Project→Action) ──
+     Centre block (3-5,3-5): Dream + 8 Project refs
+     8 outer blocks: each Project + its Actions               */
+  const SURROUND = [[0,0],[0,1],[0,2],[1,0],[1,2],[2,0],[2,1],[2,2]];
+  const PROJ_BLOCK = [[0,0],[0,1],[0,2],[1,0],[1,2],[2,0],[2,1],[2,2]]; // outer block (blockRow,blockCol) for proj i
+
+  const grid = useMemo(()=>{
+    const g = Array(9).fill(null).map(()=>Array(9).fill(null).map(()=>({type:'empty'})));
+
+    // Dream at absolute centre
+    g[4][4] = { type:'dream', title:demData.dream.title, completed:dreamDone, image:demData.dream.image };
+
+    projectStats.forEach((proj,pi)=>{
+      if(pi>=8) return;
+      const [sur_lr,sur_lc] = SURROUND[pi];
+      // Project reference in centre block
+      g[3+sur_lr][3+sur_lc] = {
+        type:'proj-ref', pi, title:proj.title, owner:proj.owner||'us',
+        completed:proj.completed, actDone:proj.actDone, actTotal:proj.actTotal, image:proj.image,
+      };
+      // Outer block for this project
+      const [br,bc] = PROJ_BLOCK[pi];
+      const R=br*3, C=bc*3;
+      // Project centre cell
+      g[R+1][C+1] = {
+        type:'project', pi, title:proj.title, owner:proj.owner||'us',
+        completed:proj.completed, actDone:proj.actDone, actTotal:proj.actTotal, image:proj.image,
+        acts:proj.acts,
+      };
+      // Action cells
+      proj.acts.forEach((act,ai)=>{
+        if(ai>=8) return;
+        const [lr,lc] = SURROUND[ai];
+        g[R+lr][C+lc] = {
+          type:'action', pi, ai, title:act.title,
+          owner:act.assignee||proj.owner||'us',
+          completed:act.status==='done',
+          completedAt:act.completedAt||null,
+          projectTitle:proj.title,
+        };
       });
     });
-    return r.sort((a,b)=>(b.completedAt||'').localeCompare(a.completedAt||''));
-  },[demData]);
+    return g;
+  },[projectStats, dreamDone, demData.dream]);
 
-  const [imgFailed, setImgFailed] = useState({});
+  /* ── Owner palette ── */
+  const OC = {
+    apple:{ fill:'#E8956D', light:'rgba(232,149,109,.12)', border:'rgba(232,149,109,.6)', text:'#B05020' },
+    pine: { fill:'#2D4A3E', light:'rgba(45,74,62,.10)',    border:'rgba(45,74,62,.55)',   text:'#1E3329' },
+    us:   { fill:'#8B7BAF', light:'rgba(139,123,175,.11)', border:'rgba(139,123,175,.6)', text:'#5D4D8F' },
+  };
 
-  if(completed.length===0) return (
-    <div className="page-scroll" style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100%'}}>
-      <div style={{textAlign:'center',color:'#C0B8AE',padding:40}}>
-        <p style={{fontSize:32,marginBottom:10}}>📸</p>
-        <p style={{fontFamily:"'Noto Serif TC',serif",fontSize:15,marginBottom:8}}>回憶牆還是空的</p>
-        <p style={{fontSize:12}}>完成的行動項目會在這裡累積，永遠不消失</p>
+  /* ── Pinch zoom handlers ── */
+  function onTouchStart(e){
+    if(e.touches.length===2){
+      const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+      setPinchRef({d,z:zoom});
+    }
+  }
+  function onTouchMove(e){
+    if(e.touches.length===2&&pinchRef){
+      e.preventDefault();
+      const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+      setZoom(Math.min(3,Math.max(0.4,pinchRef.z*(d/pinchRef.d))));
+    }
+  }
+  function onTouchEnd(){ setPinchRef(null); }
+
+  /* ── Stats ── */
+  const totalActs = projectStats.reduce((s,p)=>s+p.actTotal,0);
+  const doneActs  = projectStats.reduce((s,p)=>s+p.actDone,0);
+  const doneProjs = projectStats.filter(p=>p.completed).length;
+
+  /* ── Single cell renderer ── */
+  function MandalaCell({ cell, row, col }) {
+    const [hov, setHov] = useState(false);
+    const isCenter   = row===4&&col===4;
+    const inCenter   = row>=3&&row<=5&&col>=3&&col<=5;
+    const isProjCenter = !isCenter && row%3===1 && col%3===1;
+
+    const { type, completed, owner, title, actDone, actTotal, image } = cell;
+
+    if(type==='empty'){
+      return <div style={{
+        aspectRatio:'1', borderRadius:3,
+        background: inCenter?'rgba(45,74,62,.03)':'rgba(200,195,188,.06)',
+        border:'1px solid rgba(180,172,160,.12)',
+      }}/>;
+    }
+
+    const oc = OC[owner]||OC.us;
+    const pct = actTotal>0?Math.round(actDone/actTotal*100):completed?100:0;
+    const ownerE = owner==='apple'?'🍎':owner==='pine'?'🌲':'🤝';
+
+    // ── VISUAL: ghost vs colour ──────────────────────────────────────────
+    // incomplete = very muted; complete = full brand colour
+    const bg = completed
+      ? (isCenter?'#2D4A3E':oc.fill)
+      : inCenter
+        ? 'rgba(255,255,255,.45)'
+        : 'rgba(220,215,208,.18)';
+    const border = completed
+      ? (isCenter?'rgba(45,74,62,.8)':oc.border)
+      : hov ? oc.border : 'rgba(180,172,160,.22)';
+    const txtColor = completed
+      ? '#F8F6F1'
+      : (hov?oc.text:'rgba(100,95,88,.55)');
+    const opacity = completed ? 1 : (hov ? 0.85 : 0.55);
+
+    return (
+      <div onClick={()=>setSelected(cell)}
+        onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
+        style={{
+          aspectRatio:'1', position:'relative', cursor:'pointer',
+          background:bg, border:`1.5px solid ${border}`,
+          borderRadius: isCenter?8:isProjCenter?6:4,
+          transition:'all .18s', opacity,
+          transform:hov?'scale(1.05)':'scale(1)', zIndex:hov?3:1,
+          boxShadow:completed&&hov?`0 4px 14px ${oc.light}`:'none',
+          overflow:'hidden',
+          display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+          gap:1,padding:2,
+        }}
+      >
+        {/* image bg for completed */}
+        {image&&completed&&<img src={image} alt="" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:.22}} onError={()=>{}}/>}
+        {/* progress bar at bottom */}
+        {!completed&&pct>0&&<div style={{position:'absolute',bottom:0,left:0,height:2,width:`${pct}%`,background:oc.fill,opacity:.55}}/>}
+        {/* content */}
+        <div style={{position:'relative',display:'flex',flexDirection:'column',alignItems:'center',gap:1,padding:1}}>
+          <span style={{fontSize:isCenter?15:isProjCenter?11:8,lineHeight:1}}>
+            {type==='dream'?'✦':completed?'✓':ownerE}
+          </span>
+          <span style={{
+            fontSize:isCenter?10:isProjCenter?9:7,
+            color:txtColor, textAlign:'center', lineHeight:1.3,
+            overflow:'hidden',display:'-webkit-box',
+            WebkitLineClamp:isCenter?3:2,WebkitBoxOrient:'vertical',
+            fontWeight:(isCenter||isProjCenter)?500:400,
+          }}>{title}</span>
+          {(isCenter||isProjCenter)&&actTotal>0&&(
+            <span style={{fontSize:7,color:completed?'rgba(255,255,255,.7)':oc.text,lineHeight:1}}>
+              {actDone}/{actTotal}
+            </span>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  /* ── Detail panel ── */
+  function DetailPanel({ cell }) {
+    if(!cell) return null;
+    const proj = cell.pi!==undefined ? projectStats[cell.pi] : null;
+    return (
+      <div onClick={()=>setSelected(null)} style={{position:'fixed',inset:0,zIndex:100,background:'rgba(45,40,35,.25)',backdropFilter:'blur(6px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+        <div onClick={e=>e.stopPropagation()} style={{background:'#FDFAF5',borderRadius:18,padding:'20px',width:'100%',maxWidth:380,maxHeight:'80vh',overflowY:'auto',animation:'dialogIn .2s both'}}>
+          <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:12}}>
+            <div>
+              {cell.projectTitle&&<p style={{fontSize:10,color:'#A09688',marginBottom:2}}>{cell.projectTitle}</p>}
+              <h3 style={{fontSize:15,fontWeight:500,color:'#2D2820'}}>{cell.title}</h3>
+            </div>
+            <button onClick={()=>setSelected(null)} style={{background:'none',border:'none',fontSize:18,color:'#A09688',cursor:'pointer'}}>×</button>
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14,padding:'8px 12px',background:cell.completed?'rgba(45,74,62,.08)':'rgba(180,172,160,.08)',borderRadius:9}}>
+            <span style={{fontSize:16}}>{cell.completed?'✅':'⏳'}</span>
+            <div>
+              <p style={{fontSize:12,color:'#2D2820',fontWeight:500}}>{cell.completed?'已完成':'進行中'}</p>
+              {cell.actTotal>0&&<p style={{fontSize:10,color:'#A09688',marginTop:1}}>{cell.actDone}/{cell.actTotal} 個行動</p>}
+              {cell.completedAt&&<p style={{fontSize:10,color:'#A09688',marginTop:1}}>完成於 {cell.completedAt}</p>}
+            </div>
+          </div>
+          {/* Project actions list */}
+          {(cell.type==='project'||cell.type==='proj-ref')&&proj&&proj.acts.length>0&&(
+            <div>
+              <p style={{fontSize:10,color:'#A09688',marginBottom:7,letterSpacing:'.06em',textTransform:'uppercase'}}>行動項目</p>
+              {proj.acts.map(a=>(
+                <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 9px',background:a.status==='done'?'rgba(45,74,62,.07)':'rgba(180,172,160,.07)',borderRadius:7,marginBottom:4}}>
+                  <span style={{fontSize:12,color:a.status==='done'?'#2D4A3E':'#C8C0B4',flexShrink:0}}>{a.status==='done'?'✓':'○'}</span>
+                  <span style={{fontSize:12,color:a.status==='done'?'#2D2820':'#7D7468',flex:1}}>{a.title}</span>
+                  {a.completedAt&&<span style={{fontSize:9,color:'#C0B8AE'}}>{a.completedAt.slice(5)}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-scroll">
-      <div style={{padding:'20px 28px 40px',maxWidth:860,margin:'0 auto'}}>
-        <div style={{marginBottom:22}}>
-          <h2 style={{fontFamily:"'Noto Serif TC',serif",fontSize:19,fontWeight:400,color:'#2D2820',marginBottom:6}}>回憶牆 ✓</h2>
-          <p style={{fontSize:12,color:'#A09688',marginBottom:12}}>共完成 {completed.length} 件事 · 永遠留在這裡，讓努力被看見</p>
-          {/* Stats row */}
-          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:8}}>
-            {[
-              { label:'全部完成', value:completed.length, color:'#2D4A3E' },
-              { label:'本週完成', value:completed.filter(a=>{const w=new Date();w.setDate(w.getDate()-7);return a.completedAt&&a.completedAt>=w.toISOString().slice(0,10);}).length, color:'#5A8F7B' },
-              { label:'人生領域', value:[...new Set(completed.map(a=>a.domainTitle))].length, color:'#8B7BAF' },
-            ].map(s=>(
-              <div key={s.label} className="card" style={{padding:'10px 12px',textAlign:'center'}}>
-                <p style={{fontSize:18,fontWeight:600,color:s.color,fontFamily:"'Noto Serif TC',serif"}}>{s.value}</p>
-                <p style={{fontSize:10,color:'#A09688',marginTop:2}}>{s.label}</p>
-              </div>
-            ))}
+      <div style={{padding:'16px 14px 48px',maxWidth:860,margin:'0 auto'}}>
+        <div style={{marginBottom:14,display:'flex',alignItems:'flex-end',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
+          <div>
+            <h2 style={{fontFamily:"'Noto Serif TC',serif",fontSize:19,fontWeight:400,color:'#2D2820',marginBottom:3}}>記憶曼陀羅</h2>
+            <p style={{fontSize:12,color:'#A09688'}}>完成越多，色彩越豐富</p>
+          </div>
+          {/* Zoom controls */}
+          <div style={{display:'flex',alignItems:'center',gap:6}}>
+            <button onClick={()=>setZoom(z=>Math.max(.4,z-.15))} style={{width:28,height:28,borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF',cursor:'pointer',fontSize:14,color:'#7D7468'}}>−</button>
+            <span style={{fontSize:11,color:'#A09688',minWidth:32,textAlign:'center'}}>{Math.round(zoom*100)}%</span>
+            <button onClick={()=>setZoom(z=>Math.min(3,z+.15))} style={{width:28,height:28,borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF',cursor:'pointer',fontSize:14,color:'#7D7468'}}>＋</button>
+            <button onClick={()=>setZoom(1)} style={{fontSize:11,padding:'4px 9px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF',cursor:'pointer',color:'#A09688'}}>重設</button>
           </div>
         </div>
-        <div style={{columns:2,gap:12}}>
-          {completed.map(a=>{
-            const asn=PEOPLE[a.assignee]||PEOPLE.us;
-            const img = a.image || a.projectImage || a.domainImage;
-            const failed = imgFailed[a.id];
-            return (
-              <div key={a.id} className="card" style={{marginBottom:12,breakInside:'avoid',overflow:'hidden'}}>
-                {img&&!failed&&(
-                  <div style={{height:100,overflow:'hidden'}}>
-                    <img src={img} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}} onError={()=>setImgFailed(prev=>({...prev,[a.id]:true}))} />
-                  </div>
-                )}
-                <div style={{padding:'11px 13px'}}>
-                  <p style={{fontSize:12,fontWeight:500,color:'#2D2820',marginBottom:3}}>{a.title}</p>
-                  <p style={{fontSize:10,color:'#A09688',marginBottom:6}}>{a.domainTitle} › {a.projectTitle}</p>
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                    <span style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:'#A09688'}}><span style={{width:5,height:5,borderRadius:'50%',background:asn.color,display:'inline-block'}}></span>{asn.name}</span>
-                    {a.completedAt&&<span style={{fontSize:10,color:'#C0B8AE'}}>{a.completedAt}</span>}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+
+        {/* Stats */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:7,marginBottom:14}}>
+          {[
+            {label:'已完成行動',value:`${doneActs}/${totalActs}`,color:'#2D4A3E'},
+            {label:'已完成專案',value:`${doneProjs}/${projectStats.length}`,color:'#5A8F7B'},
+            {label:'整體進度',  value:`${totalActs>0?Math.round(doneActs/totalActs*100):0}%`,color:'#8B7BAF'},
+          ].map(s=>(
+            <div key={s.label} className="card" style={{padding:'9px 11px',textAlign:'center'}}>
+              <p style={{fontSize:16,fontWeight:600,color:s.color,fontFamily:"'Noto Serif TC',serif"}}>{s.value}</p>
+              <p style={{fontSize:9,color:'#A09688',marginTop:2}}>{s.label}</p>
+            </div>
+          ))}
         </div>
+
+        {/* Mandala with pinch zoom */}
+        <div style={{overflow:'auto',WebkitOverflowScrolling:'touch'}}
+          onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+          <div style={{
+            display:'inline-grid',
+            gridTemplateColumns:'repeat(9,1fr)',
+            gap:3,
+            background:'rgba(238,234,228,.55)',
+            borderRadius:14,padding:8,
+            border:'1px solid rgba(180,172,160,.3)',
+            transform:`scale(${zoom})`,
+            transformOrigin:'top left',
+            minWidth:480,
+            width:'100%',
+          }}>
+            {grid.map((row,ri)=>row.map((cell,ci)=>{
+              const isBlockBorderR=ci===2||ci===5;
+              const isBlockBorderB=ri===2||ri===5;
+              return (
+                <div key={`${ri}-${ci}`} style={{
+                  paddingRight:isBlockBorderR?3:0,paddingBottom:isBlockBorderB?3:0,
+                  borderRight:isBlockBorderR?'2px solid rgba(180,172,160,.35)':'none',
+                  borderBottom:isBlockBorderB?'2px solid rgba(180,172,160,.35)':'none',
+                }}>
+                  <MandalaCell cell={cell} row={ri} col={ci}/>
+                </div>
+              );
+            }))}
+          </div>
+        </div>
+        <p style={{fontSize:10,color:'#C0B8AE',textAlign:'center',marginTop:10}}>
+          點擊格子查看詳情 · 手機可雙指縮放 · 電腦可用 +/− 縮放
+        </p>
       </div>
+      {selected&&<DetailPanel cell={selected}/>}
     </div>
   );
 }
 
-/* ════════════════════════════════════════════════════════
-   REVIEW PAGE (Timeline)
-════════════════════════════════════════════════════════ */
+
 function ReviewPage({ demData, calEvents }) {
   const items = useMemo(()=>{
     const r=[];
-    demData.domains.forEach(dom=>{
-      (demData.projects[dom.id]||[]).forEach(proj=>{
-        (demData.actions[proj.id]||[]).forEach(a=>{
-          if(a.status==='done') r.push({...a,domainTitle:dom.title,projectTitle:proj.title,type:'action',date:a.completedAt||''});
-        });
+    (demData.projects||[]).forEach(proj=>{
+      (demData.actions[proj.id]||[]).forEach(a=>{
+        if(a.status==='done') r.push({...a,domainTitle:proj.title,projectTitle:proj.title,type:'action',date:a.completedAt||''});
       });
     });
     calEvents.forEach(e=>r.push({...e,type:'event'}));
@@ -1867,14 +2061,16 @@ function App() {
   const [page, setPage] = useState('home');
   const [dreamJump, setDreamJump] = useState(null);
 
-  function onJumpDomain(domainId, domainTitle) {
-    setDreamJump({ domainId, domainTitle, ts: Date.now() }); // ts forces useEffect to fire even if same domain
+  function onJumpProject(projectId, projectTitle) {
+    setDreamJump({ projectId, projectTitle, ts: Date.now() });
     setPage('dream');
   }
 
   const [state, setState] = useState(() => {
     const saved = lsLoad();
-    return saved || buildDefaultState();
+    if (!saved) return buildDefaultState();
+    // Migrate old 4-layer data format to new 3-layer if needed
+    return { ...saved, demData: migrateData(saved.demData) };
   });
 
   const [loading, setLoading]   = useState(IS_CONFIGURED);
@@ -1893,13 +2089,19 @@ function App() {
     try {
       const data = await sheetsLoadAll();
       setState(prev => {
-        const next = { ...prev };
-        if (data.demData)     next.demData     = data.demData;
-        if (data.calEvents)   next.calEvents   = data.calEvents;
-        if (data.todayStatus) next.todayStatus = data.todayStatus;
-        if (data.support)     next.support     = data.support;
-        lsSave(next);
-        return next;
+        try {
+          const next = { ...prev };
+          // migrateData validates format; falls back to buildDefault() if wrong format
+          if (data.demData)     next.demData     = migrateData(data.demData);
+          if (data.calEvents && Array.isArray(data.calEvents)) next.calEvents = data.calEvents;
+          if (data.todayStatus) next.todayStatus = data.todayStatus;
+          if (data.support)     next.support     = data.support;
+          lsSave(next);
+          return next;
+        } catch(e) {
+          console.error('setState from Sheets failed:', e);
+          return prev; // keep existing state on error
+        }
       });
       setLoadErr('');
     } catch(err) {
@@ -1964,1810 +2166,19 @@ function App() {
           </button>
         ))}
         <button onClick={fetchFromSheets} disabled={syncing} title="同步最新資料" className={`sync-btn${syncing?' spinning':''}`} style={{fontSize:15}}>↻</button>
-      </nav>
-
-      {/* Page content */}
-      <div className="page-content">
-        {page==='home'     && <HomePage     demData={state.demData} calEvents={state.calEvents} todayStatus={state.todayStatus} setTodayStatus={setTodayStatus} setPage={setPage} onJumpDomain={onJumpDomain} />}
-        {page==='dream'    && <div style={{flex:1,display:'flex',overflow:'hidden'}}><DreamExpansionMap data={state.demData} setData={setDemData} support={state.support} onSupportChange={handleSupportChange} jumpTo={dreamJump} /></div>}
-        {page==='calendar' && <CalendarPage calEvents={state.calEvents} setCalEvents={setCalEvents} />}
-        {page==='projects' && <ProjectsPage demData={state.demData} setDemData={setDemData} />}
-        {page==='memories' && <MemoriesPage demData={state.demData} />}
-        {page==='review'   && <ReviewPage  demData={state.demData} calEvents={state.calEvents} />}
-        {loadErr&&page!=='dream'&&<div style={{position:'fixed',bottom:70,left:'50%',transform:'translateX(-50%)',background:'rgba(192,136,122,.9)',color:'#FFF',fontSize:12,padding:'6px 14px',borderRadius:20,pointerEvents:'none',zIndex:30}}>{loadErr}</div>}
-      </div>
-
-      {/* Bottom nav (mobile) */}
-      <nav className="bottom-nav">
-        {PAGES.map(p => (
-          <button key={p.key} onClick={() => setPage(p.key)} className={`nav-btn${page===p.key?' active':''}`}>
-            <span className="nav-icon">{p.icon}</span>
-            <span className="nav-label" style={{color:'rgba(248,246,241,.7)',fontSize:8}}>{p.label}</span>
-          </button>
-        ))}
-      </nav>
-    </div>
-  );
-}
-
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-</script>
-</body>
-</html>
-0,172,160,.4);border-radius:16px}
-    input,textarea,select{font-family:'Noto Sans TC',sans-serif;font-size:13px;color:#2D2820;background:#FFF;border:1.5px solid #E0D9CF;border-radius:10px;padding:9px 12px;outline:none;transition:border-color .15s;width:100%}
-    input:focus,textarea:focus,select:focus{border-color:#2D4A3E}
-    textarea{resize:none;line-height:1.6}
-    button{font-family:'Noto Sans TC',sans-serif;cursor:pointer}
-    .btn-primary{background:#2D4A3E;color:#F8F6F1;border:none;border-radius:10px;padding:9px 20px;font-size:13px;transition:background .15s}
-    .btn-primary:hover{background:#3A5F4E}
-    .btn-ghost{background:none;border:1.5px solid #E0D9CF;border-radius:10px;padding:9px 16px;font-size:13px;color:#7D7468;transition:all .15s}
-    .btn-ghost:hover{border-color:#2D4A3E;color:#2D4A3E}
-  </style>
-</head>
-<body>
-<div id="root"></div>
-<script type="text/babel" data-presets="react">
-const { useState, useEffect, useRef, useCallback, useMemo } = React;
-
-/* ════════════════════════════════════════════════════════
-   ★ 設定區：貼上你的 Google Apps Script 網址
-════════════════════════════════════════════════════════ */
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwWF7d8VAbj1XhijdKRc8d8eLPwMhdikWxqw5Il4ocRJ_D27IFH5VPmTfjYODdvUXoj/exec';
-const IS_CONFIGURED = APPS_SCRIPT_URL !== 'YOUR_APPS_SCRIPT_URL_HERE';
-
-/* ════════════════════════════════════════════════════════
-   Google Sheets / Drive API
-════════════════════════════════════════════════════════ */
-async function apiGet(params) {
-  const url = new URL(APPS_SCRIPT_URL);
-  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  const res = await fetch(url.toString(), { redirect: 'follow' });
-  return JSON.parse(await res.text());
-}
-async function apiPost(body) {
-  const res = await fetch(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(body), redirect: 'follow' });
-  return JSON.parse(await res.text());
-}
-async function sheetsLoadAll() {
-  const r = await apiGet({ action: 'getData' });
-  if (r.ok) return r.data;
-  throw new Error(r.error || '讀取失敗');
-}
-async function sheetsSave(key, value) {
-  await apiPost({ action: 'saveData', key, value });
-}
-async function driveUploadImage(dataUrl) {
-  const [header, base64] = dataUrl.split(',');
-  const mimeType = header.match(/:(.*?);/)[1];
-  const filename  = 'node-' + Date.now() + '.' + mimeType.split('/')[1];
-  const r = await apiPost({ action: 'uploadImage', filename, base64, mimeType });
-  if (r.ok) return r.url;
-  throw new Error(r.error || '圖片上傳失敗');
-}
-
-/* ════════════════════════════════════════════════════════
-   CONSTANTS
-════════════════════════════════════════════════════════ */
-const APPLE = { key:'apple', name:'蘋果派', color:'#E8956D' };
-const PINE  = { key:'pine',  name:'松果',   color:'#5A8F7B' };
-const US    = { key:'us',    name:'我們',   color:'#8B7BAF' };
-const PEOPLE = { apple:APPLE, pine:PINE, us:US };
-
-const STATUS_LABEL = { todo:'待開始', doing:'進行中', done:'已完成' };
-const STATUS_COLOR = {
-  todo:  { bg:'rgba(160,150,136,.1)', text:'#7D7468', border:'rgba(160,150,136,.3)' },
-  doing: { bg:'rgba(232,149,109,.1)', text:'#C07040', border:'rgba(232,149,109,.3)' },
-  done:  { bg:'rgba(45,74,62,.1)',    text:'#2D4A3E', border:'rgba(45,74,62,.3)'    },
-};
-
-const PAGES = [
-  { key:'home',      label:'首頁',  icon:'🏠' },
-  { key:'dream',     label:'夢想',  icon:'✦'  },
-  { key:'calendar',  label:'月曆',  icon:'📅' },
-  { key:'projects',  label:'專案',  icon:'◎'  },
-  { key:'memories',  label:'回憶',  icon:'📸' },
-  { key:'review',    label:'回顧',  icon:'📖' },
-];
-const MONTHS = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
-const DAYS   = ['日','一','二','三','四','五','六'];
-
-/* ════════════════════════════════════════════════════════
-   LOCAL STORAGE
-════════════════════════════════════════════════════════ */
-const LS_KEY = 'apple-pine-v2';
-function lsLoad() { try { const s=localStorage.getItem(LS_KEY); return s?JSON.parse(s):null; } catch(e){ return null; } }
-function lsSave(s) { try { localStorage.setItem(LS_KEY, JSON.stringify(s)); } catch(e){} }
-
-/* ════════════════════════════════════════════════════════
-   DATA MODEL
-════════════════════════════════════════════════════════ */
-function uid() { return Math.random().toString(36).slice(2, 9); }
-
-function makeNode(title, desc='') {
-  return { id:uid(), title, desc, image:null, updates:[] };
-}
-function makeAction(title) {
-  return { id:uid(), title, desc:'', image:null, updates:[], status:'todo', assignee:'us', dueDate:null, completedAt:null };
-}
-
-function buildDefault() {
-  const domainDefs = [
-    { title:'IRC 內在真實練習圈', owner:'apple' },
-    { title:'森林療癒',           owner:'pine'  },
-    { title:'身心健康',           owner:'us'    },
-    { title:'關係經營',           owner:'us'    },
-    { title:'學習成長',           owner:'us'    },
-    { title:'財務工作',           owner:'us'    },
-    { title:'旅行探索',           owner:'us'    },
-    { title:'家與生活空間',       owner:'us'    },
-  ];
-  const domains = domainDefs.map(({ title, owner }) => ({ ...makeNode(title), owner }));
-  const [irc,forest,health,relation,learning,finance,travel,home] = domains;
-  const projects = {
-    [irc.id]:      ['品牌建立','IRC 網站','年度盛會','SOF研究','引導員培育','課程設計','身體覺察','社群經營'].map(t=>makeNode(t)),
-    [forest.id]:   ['森林工作坊','自然教育','森林探勘','森林旅行','合作夥伴','裝備','品牌建立','森林課程'].map(t=>makeNode(t)),
-    [health.id]:   ['空中瑜伽','Feldenkrais','運動','睡眠','飲食','身體保養','情緒照顧','休息'].map(t=>makeNode(t)),
-    [relation.id]: ['深度對話','約會','共同決策','衝突修復','傾聽','陪伴','家庭','朋友'].map(t=>makeNode(t)),
-    [learning.id]: ['閱讀','課程','研究','寫作','海外學習','反思','創作','AI工具'].map(t=>makeNode(t)),
-    [finance.id]:  ['收入','投資','儲蓄','工作安排','事業規劃','共同預算','保險','退休規劃'].map(t=>makeNode(t)),
-    [travel.id]:   ['京都','大阪','森林旅行','淡蘭古道','海外旅行','文化探索','攝影','自由旅行'].map(t=>makeNode(t)),
-    [home.id]:     ['整理收納','工作室','生活儀式','居住品質','家具','植物','居家修繕','共同空間'].map(t=>makeNode(t)),
-  };
-  const eventProj = projects[irc.id].find(p=>p.title==='年度盛會');
-  const actions = {
-    [eventProj.id]: ['找場地','招募協作者','宣傳','活動流程','講者邀請','教材準備','預算','志工招募'].map(t=>makeAction(t)),
-  };
-  return { dream:makeNode('共創理想生活'), domains, projects, actions };
-}
-
-function buildDefaultState() {
-  return { demData:buildDefault(), calEvents:[], todayStatus:{ apple:{stress:'normal',note:''}, pine:{stress:'normal',note:''} }, support:{} };
-}
-
-/* ════════════════════════════════════════════════════════
-   HELPERS
-════════════════════════════════════════════════════════ */
-function todayKey() {
-  const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-function todayLabel() {
-  const d=new Date(), wd=['日','一','二','三','四','五','六'];
-  return `${d.getFullYear()} 年 ${d.getMonth()+1} 月 ${d.getDate()} 日 · 星期${wd[d.getDay()]}`;
-}
-function toKey(y,m,d) { return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
-function monthGrid(y,m) {
-  const first=new Date(y,m,1).getDay(), days=new Date(y,m+1,0).getDate(), cells=[];
-  for(let i=0;i<first;i++) cells.push(null);
-  for(let d=1;d<=days;d++) cells.push(d);
-  while(cells.length%7!==0) cells.push(null);
-  return cells;
-}
-function orbitPositions(n,rx=38,ry=34) {
-  return Array.from({length:n},(_,i)=>{const a=(i/n)*2*Math.PI-Math.PI/2;return{x:50+rx*Math.cos(a),y:50+ry*Math.sin(a)};});
-}
-
-/* ════════════════════════════════════════════════════════
-   IMAGE UPLOAD FIELD
-════════════════════════════════════════════════════════ */
-function ImageUploadField({ value, onChange }) {
-  const [warning, setWarning] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => { setFailed(false); }, [value]);
-
-  function handleFile(e) {
-    const file = e.target.files&&e.target.files[0]; e.target.value='';
-    if (!file) return;
-    if (file.size>10*1024*1024) { setWarning('照片超過 10MB，請選小一點的'); return; }
-    if (!IS_CONFIGURED) { setWarning('請先設定 Google Apps Script 網址才能上傳照片'); return; }
-    setWarning(''); setUploading(true);
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try { const url = await driveUploadImage(reader.result); onChange(url); setFailed(false); }
-      catch (err) { setWarning('上傳失敗：' + err.message); }
-      finally { setUploading(false); }
-    };
-    reader.onerror = () => { setWarning('讀取失敗'); setUploading(false); };
-    reader.readAsDataURL(file);
-  }
-
-  return (
-    <div style={{ display:'flex',flexDirection:'column',gap:6 }}>
-      <label style={{ display:'block',border:'1.5px dashed #D8D0C4',borderRadius:10,padding:'10px',textAlign:'center',fontSize:12,color:uploading?'#C0B8AE':'#A09688',cursor:uploading?'not-allowed':'pointer',background:uploading?'transparent':'rgba(255,255,255,.5)' }}>
-        {uploading ? '上傳至 Google Drive 中...' : '📷 上傳照片'}
-        <input type="file" accept="image/*" style={{display:'none'}} onChange={handleFile} disabled={uploading} />
-      </label>
-      {warning && <p style={{fontSize:11,color:'#C0887A'}}>{warning}</p>}
-      {value && (
-        <div style={{position:'relative',height:80,borderRadius:10,overflow:'hidden',border:'1px solid #E0D9CF'}}>
-          {!failed
-            ? <img src={value} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}} onError={()=>setFailed(true)} />
-            : <div style={{width:'100%',height:'100%',background:'#F0EDE8',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:'#C0B8AE'}}>圖片無法載入</div>}
-          <button type="button" onClick={()=>onChange(null)} style={{position:'absolute',top:4,right:4,width:20,height:20,borderRadius:'50%',background:'rgba(255,255,255,.9)',border:'none',fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1}}>×</button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════════════════
-   DEM — EditDialog (enhanced with image, updates, support)
-════════════════════════════════════════════════════════ */
-function EditDialog({ node, onSave, onDelete, onClose, support, onSupportChange }) {
-  const [title, setTitle]   = useState(node.title);
-  const [desc, setDesc]     = useState(node.desc||'');
-  const [image, setImage]   = useState(node.image||null);
-  const [updates, setUpdates] = useState(node.updates||[]);
-  const [updateText, setUpdateText] = useState('');
-  const [neededText, setNeededText] = useState('');
-  const [receivedText, setReceivedText] = useState('');
-  const [tab, setTab] = useState('basic'); // basic | updates | support
-  const titleRef = useRef();
-  const sup = support[node.id] || { needed:[], received:[] };
-
-  useEffect(() => { titleRef.current?.focus(); titleRef.current?.select(); }, []);
-
-  function handleSave() {
-    if (!title.trim()) return;
-    onSave({ ...node, title:title.trim(), desc:desc.trim(), image, updates });
-    onClose();
-  }
-  function handleDelete() {
-    if (window.confirm(`確定要刪除「${node.title}」嗎？`)) { onDelete(node.id); onClose(); }
-  }
-  function addUpdate() {
-    if (!updateText.trim()) return;
-    const entry = { date:todayKey(), text:updateText.trim() };
-    setUpdates(prev=>[entry,...prev]); setUpdateText('');
-  }
-  function addNeeded() {
-    if (!neededText.trim()) return;
-    const newSup = { ...sup, needed:[...sup.needed, neededText.trim()] };
-    onSupportChange(node.id, newSup); setNeededText('');
-  }
-  function addReceived() {
-    if (!receivedText.trim()) return;
-    const newSup = { ...sup, received:[...sup.received, receivedText.trim()] };
-    onSupportChange(node.id, newSup); setReceivedText('');
-  }
-
-  const tabStyle = (t) => ({
-    background:'none', border:'none', cursor:'pointer', fontSize:12,
-    padding:'6px 12px', borderRadius:8, fontFamily:'inherit',
-    color: tab===t ? '#2D4A3E' : '#A09688',
-    background: tab===t ? 'rgba(45,74,62,.08)' : 'none',
-    fontWeight: tab===t ? 500 : 400,
-  });
-
-  return (
-    <div onClick={onClose} style={{position:'fixed',inset:0,zIndex:200,background:'rgba(45,40,35,.25)',backdropFilter:'blur(6px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:'#FDFAF5',borderRadius:20,width:'100%',maxWidth:420,maxHeight:'85vh',overflow:'hidden',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(45,40,35,.14)',animation:'dialogIn .22s cubic-bezier(.22,1,.36,1) both'}}>
-        {/* Tabs */}
-        <div style={{display:'flex',gap:4,padding:'14px 16px 0',borderBottom:'1px solid #EDE8E0',flexShrink:0}}>
-          <button style={tabStyle('basic')} onClick={()=>setTab('basic')}>基本</button>
-          <button style={tabStyle('image')} onClick={()=>setTab('image')}>圖片</button>
-          <button style={tabStyle('updates')} onClick={()=>setTab('updates')}>更新 {updates.length>0?`(${updates.length})`:''}</button>
-          <button style={tabStyle('support')} onClick={()=>setTab('support')}>支持</button>
-        </div>
-
-        {/* Content */}
-        <div style={{overflowY:'auto',padding:'18px 20px',flex:1}}>
-          {tab==='basic' && (
-            <div style={{display:'flex',flexDirection:'column',gap:14}}>
-              <div>
-                <label style={{display:'block',fontSize:10,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:5}}>標題</label>
-                <input ref={titleRef} value={title} onChange={e=>setTitle(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSave()} placeholder="節點名稱…" />
-              </div>
-              <div>
-                <label style={{display:'block',fontSize:10,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:5}}>描述</label>
-                <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder="這個節點的意義…" rows={3} />
-              </div>
-            </div>
-          )}
-          {tab==='image' && (
-            <div style={{display:'flex',flexDirection:'column',gap:10}}>
-              <p style={{fontSize:12,color:'#A09688'}}>上傳一張代表這個節點的照片或願景圖</p>
-              <ImageUploadField value={image} onChange={setImage} />
-            </div>
-          )}
-          {tab==='updates' && (
-            <div style={{display:'flex',flexDirection:'column',gap:12}}>
-              <div style={{display:'flex',gap:8}}>
-                <input value={updateText} onChange={e=>setUpdateText(e.target.value)} placeholder="記錄一個新進展…" style={{flex:1}} onKeyDown={e=>e.key==='Enter'&&addUpdate()} />
-                <button onClick={addUpdate} className="btn-primary" style={{padding:'9px 14px',flexShrink:0}}>加入</button>
-              </div>
-              {updates.length===0 && <p style={{fontSize:12,color:'#C0B8AE',textAlign:'center',padding:'20px 0'}}>還沒有更新紀錄</p>}
-              {updates.map((u,i)=>(
-                <div key={i} style={{display:'flex',gap:8,borderBottom:'1px solid #EDE8E0',paddingBottom:8}}>
-                  <span style={{fontSize:11,color:'#C0B8AE',flexShrink:0,marginTop:1}}>{u.date}</span>
-                  <span style={{fontSize:13,color:'#3D3830',lineHeight:1.5}}>{u.text}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {tab==='support' && (
-            <div style={{display:'flex',flexDirection:'column',gap:16}}>
-              <div>
-                <p style={{fontSize:11,color:'#A09688',marginBottom:8,letterSpacing:'.04em'}}>我希望伴侶如何支持我</p>
-                <div style={{display:'flex',gap:8,marginBottom:8}}>
-                  <input value={neededText} onChange={e=>setNeededText(e.target.value)} placeholder="例如：陪我討論、給我回饋…" style={{flex:1}} onKeyDown={e=>e.key==='Enter'&&addNeeded()} />
-                  <button onClick={addNeeded} className="btn-primary" style={{padding:'9px 14px',flexShrink:0}}>加入</button>
-                </div>
-                {sup.needed.length===0 && <p style={{fontSize:11,color:'#C0B8AE'}}>尚未填寫</p>}
-                {sup.needed.map((n,i)=><p key={i} style={{fontSize:12,color:'#3D3830',padding:'5px 0',borderBottom:'1px solid #F0EDE8'}}>· {n}</p>)}
-              </div>
-              <div>
-                <p style={{fontSize:11,color:'#A09688',marginBottom:8,letterSpacing:'.04em'}}>已收到的支持</p>
-                <div style={{display:'flex',gap:8,marginBottom:8}}>
-                  <input value={receivedText} onChange={e=>setReceivedText(e.target.value)} placeholder="記錄一個收到的支持…" style={{flex:1}} onKeyDown={e=>e.key==='Enter'&&addReceived()} />
-                  <button onClick={addReceived} className="btn-primary" style={{padding:'9px 14px',flexShrink:0}}>加入</button>
-                </div>
-                {sup.received.length===0 && <p style={{fontSize:11,color:'#C0B8AE'}}>尚未紀錄</p>}
-                {sup.received.map((n,i)=>(
-                  <p key={i} style={{fontSize:12,color:'#2D4A3E',padding:'5px 0',borderBottom:'1px solid #F0EDE8'}}>✓ {n}</p>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'12px 20px',borderTop:'1px solid #EDE8E0',flexShrink:0}}>
-          <button onClick={handleDelete} style={{background:'none',border:'none',fontSize:12,color:'#C0887A',fontFamily:'inherit',cursor:'pointer'}}>刪除節點</button>
-          <div style={{display:'flex',gap:8}}>
-            <button onClick={onClose} className="btn-ghost" style={{padding:'7px 16px',fontSize:12}}>取消</button>
-            <button onClick={handleSave} className="btn-primary" style={{padding:'7px 18px',fontSize:12}}>儲存</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════════════════
-   DEM — OrbitNode
-════════════════════════════════════════════════════════ */
-function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder }) {
-  const [hovered, setHovered] = useState(false);
-  if (isPlaceholder) {
-    return (
-      <div className="node-orbit" style={{left:`${pos.x}%`,top:`${pos.y}%`,animationDelay:`${delay}ms`}}>
-        <div onClick={onZoomIn} onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)}
-          style={{width:90,height:90,borderRadius:'50%',border:`2px dashed ${hovered?'#2D4A3E':'#C8C0B4'}`,background:hovered?'rgba(45,74,62,.04)':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',transition:'all .2s'}}>
-          <span style={{fontSize:22,color:hovered?'#2D4A3E':'#C8C0B4'}}>＋</span>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="node-orbit" style={{left:`${pos.x}%`,top:`${pos.y}%`,animationDelay:`${delay}ms`}} onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)}>
-      <div onClick={e=>{e.stopPropagation();onEdit();}} style={{position:'absolute',top:-6,right:-6,width:22,height:22,borderRadius:'50%',background:hovered?'#2D4A3E':'transparent',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',opacity:hovered?1:0,transition:'all .15s',zIndex:2,fontSize:11,color:'#F8F6F1'}}>✎</div>
-      <div onClick={onZoomIn}
-        style={{width:104,height:104,borderRadius:'50%',background:hovered?'rgba(255,255,255,.92)':'rgba(255,255,255,.72)',border:`1.5px solid ${hovered?'rgba(45,74,62,.3)':'rgba(180,172,160,.4)'}`,backdropFilter:'blur(8px)',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',cursor:'pointer',transition:'all .18s',transform:hovered?'scale(1.05)':'scale(1)',boxShadow:hovered?'0 4px 20px rgba(45,74,62,.10)':'0 2px 8px rgba(0,0,0,.04)',position:'relative',overflow:'hidden'}}>
-        {node.image && (
-          <div style={{position:'absolute',inset:0,borderRadius:'50%',overflow:'hidden',opacity:.2}}>
-            <img src={node.image} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}} onError={()=>{}} />
-          </div>
-        )}
-        <span style={{fontSize:node.title.length>7?11:12,fontWeight:500,color:hovered?'#2D4A3E':'#3D3830',textAlign:'center',lineHeight:1.5,letterSpacing:'.03em',padding:'0 10px',transition:'color .18s',position:'relative'}}>
-          {node.title}
-        </span>
-        {/* Owner emoji — always visible when set */}
-        {node.assignee && (
-          <span style={{fontSize:11,position:'relative',marginTop:1,lineHeight:1}}>
-            {node.assignee==='apple'?'🍎':node.assignee==='pine'?'🌲':'🤝'}
-          </span>
-        )}
-        {/* Project / action counts passed via node._projCount / node._actCount */}
-        {(node._projCount!==undefined||node._actCount!==undefined) && (
-          <span style={{fontSize:8,color:'#A09688',position:'relative',textAlign:'center',lineHeight:1.6,marginTop:1}}>
-            {node._projCount!==undefined&&<span>{node._projCount}P</span>}
-            {node._projCount!==undefined&&node._actCount!==undefined&&<span style={{margin:'0 2px'}}>·</span>}
-            {node._actCount!==undefined&&<span>{node._actCount}A</span>}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════════════════
-   DEM — DreamExpansionMap
-════════════════════════════════════════════════════════ */
-function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) {
-  const [stack, setStack]          = useState([{id:'dream',title:data.dream.title,depth:0}]);
-  const [phase, setPhase]          = useState('idle');
-  const [pendingStack, setPending] = useState(null);
-  const [animating, setAnimating]  = useState(false);
-  const [editTarget, setEditTarget] = useState(null);
-
-  // Jump to a specific domain when requested from Home page
-  useEffect(()=>{
-    if (!jumpTo?.domainId) return;
-    const dom = data.domains.find(d=>d.id===jumpTo.domainId);
-    if (!dom) return;
-    setStack([
-      {id:'dream', title:data.dream.title, depth:0},
-      {id:dom.id,  title:dom.title,        depth:1},
-    ]);
-  },[jumpTo]);
-
-  const current    = stack[stack.length-1];
-  const depthLabel = ['Life Domains','Projects','Actions'][current.depth]||'';
-
-  const getList = useCallback((id,depth)=>{
-    if(depth===0) return data.domains;
-    if(depth===1) return data.projects[id]||[];
-    if(depth===2) return data.actions[id]||[];
-    return [];
-  },[data]);
-
-  const children = useMemo(()=>{
-    const list = getList(current.id, current.depth);
-    // At domain level, enrich nodes with project/action counts for P3
-    if (current.depth===0) {
-      return list.map(dom=>{
-        const projs = data.projects[dom.id]||[];
-        const acts  = projs.flatMap(p=>data.actions[p.id]||[]);
-        return {...dom, _projCount:projs.length, _actCount:acts.length};
-      });
-    }
-    // At project level, enrich with action count
-    if (current.depth===1) {
-      return list.map(proj=>{
-        const acts = data.actions[proj.id]||[];
-        return {...proj, _actCount:acts.length};
-      });
-    }
-    return list;
-  },[getList, current, data]);
-  const slots = [...children,...Array(Math.max(0,8-children.length)).fill(null)].slice(0,9);
-  const positions = orbitPositions(slots.length);
-
-  const navigate = useCallback((ns)=>{ if(animating) return; setAnimating(true); setPhase('exit'); setPending(ns); },[animating]);
-  useEffect(()=>{
-    if(phase==='exit'){ const t=setTimeout(()=>{ setStack(pendingStack); setPhase('enter'); },260); return()=>clearTimeout(t); }
-    if(phase==='enter'){ const t=setTimeout(()=>{ setPhase('idle'); setAnimating(false); setPending(null); },420); return()=>clearTimeout(t); }
-  },[phase,pendingStack]);
-
-  const zoomIn = useCallback((node)=>{ if(current.depth>=2) return; navigate([...stack,{id:node.id,title:node.title,depth:current.depth+1}]); },[stack,current,navigate]);
-  const zoomTo = useCallback((idx)=>{ if(idx===stack.length-1) return; navigate(stack.slice(0,idx+1)); },[stack,navigate]);
-
-  const updateNode = useCallback((layer,parentId,updated)=>{
-    setData(d=>{
-      if(layer==='dream') return{...d,dream:updated};
-      if(layer==='domains') return{...d,domains:d.domains.map(n=>n.id===updated.id?updated:n)};
-      if(layer==='projects') return{...d,projects:{...d.projects,[parentId]:(d.projects[parentId]||[]).map(n=>n.id===updated.id?updated:n)}};
-      if(layer==='actions') return{...d,actions:{...d.actions,[parentId]:(d.actions[parentId]||[]).map(n=>n.id===updated.id?updated:n)}};
-      return d;
-    });
-    setStack(s=>s.map(item=>item.id===updated.id?{...item,title:updated.title}:item));
-  },[setData]);
-
-  const deleteNode = useCallback((layer,parentId,id)=>{
-    setData(d=>{
-      if(layer==='domains') return{...d,domains:d.domains.filter(n=>n.id!==id)};
-      if(layer==='projects') return{...d,projects:{...d.projects,[parentId]:(d.projects[parentId]||[]).filter(n=>n.id!==id)}};
-      if(layer==='actions') return{...d,actions:{...d.actions,[parentId]:(d.actions[parentId]||[]).filter(n=>n.id!==id)}};
-      return d;
-    });
-    setStack(s=>{ const i=s.findIndex(item=>item.id===id); return i>-1?s.slice(0,i):s; });
-  },[setData]);
-
-  const addNode = useCallback((layer,parentId)=>{
-    const n = layer==='actions' ? makeAction('新節點') : makeNode('新節點');
-    setData(d=>{
-      if(layer==='domains') return{...d,domains:[...d.domains,n]};
-      if(layer==='projects') return{...d,projects:{...d.projects,[parentId]:[...(d.projects[parentId]||[]),n]}};
-      if(layer==='actions') return{...d,actions:{...d.actions,[parentId]:[...(d.actions[parentId]||[]),n]}};
-      return d;
-    });
-    setTimeout(()=>setEditTarget({node:n,layer,parentId}),50);
-  },[setData]);
-
-  const currentLayer = current.depth===0?'domains':current.depth===1?'projects':'actions';
-
-  return (
-    <div style={{flex:1,position:'relative',display:'flex',flexDirection:'column',fontFamily:"'Noto Sans TC','PingFang TC',system-ui,sans-serif",overflow:'hidden',userSelect:'none'}}>
-      {/* Top breadcrumb */}
-      <div style={{padding:'18px 24px 0',display:'flex',alignItems:'center',gap:6,minHeight:44,flexShrink:0}}>
-        {stack.map((s,i)=>(
-          <span key={s.id+i} style={{display:'flex',alignItems:'center',gap:6}}>
-            {i>0&&<span style={{color:'#C8C0B4',fontSize:13}}>›</span>}
-            <button onClick={()=>zoomTo(i)} style={{background:'none',border:'none',padding:'2px 4px',cursor:i===stack.length-1?'default':'pointer',fontSize:13,fontFamily:'inherit',color:i===stack.length-1?'#3D3830':'#A09688',fontWeight:i===stack.length-1?500:400,transition:'color .15s'}} onMouseEnter={e=>{if(i<stack.length-1)e.target.style.color='#2D4A3E'}} onMouseLeave={e=>{if(i<stack.length-1)e.target.style.color='#A09688'}}>{s.title}</button>
-          </span>
-        ))}
-        {depthLabel&&<span style={{marginLeft:8,fontSize:10,letterSpacing:'.12em',color:'#A09688',textTransform:'uppercase',padding:'3px 10px',border:'1px solid #DDD8D0',borderRadius:20,background:'rgba(255,255,255,.7)'}}>{depthLabel}</span>}
-        <div style={{marginLeft:'auto'}}>
-          <button onClick={()=>setEditTarget({node:data.dream,layer:'dream',parentId:null})} style={{background:'none',border:'1.5px solid #E0D9CF',borderRadius:20,padding:'4px 14px',fontSize:11,color:'#A09688',cursor:'pointer',fontFamily:'inherit',letterSpacing:'.06em',transition:'all .15s'}} onMouseEnter={e=>{e.currentTarget.style.borderColor='#2D4A3E';e.currentTarget.style.color='#2D4A3E'}} onMouseLeave={e=>{e.currentTarget.style.borderColor='#E0D9CF';e.currentTarget.style.color='#A09688'}}>編輯夢想</button>
-        </div>
-      </div>
-
-      {/* Map */}
-      <div style={{flex:1,position:'relative'}}>
-        <div className={`phase-${phase}`} style={{position:'absolute',inset:0}}>
-          <svg className="svg-lines" viewBox="0 0 100 100" preserveAspectRatio="none">
-            {slots.map((node,i)=>{const pos=positions[i];return(<line key={i} x1="50" y1="50" x2={pos.x} y2={pos.y} stroke={node?'#C8C0B4':'#E0D8CE'} strokeWidth="0.5" strokeDasharray={node?'3 5':'2 7'} opacity={node?.5:.25}/>);})}
-          </svg>
-          <div className="node-center">
-            <div style={{width:148,height:148,borderRadius:'50%',background:'#2D4A3E',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 8px 40px rgba(45,74,62,.18)',cursor:stack.length>1?'pointer':'default',position:'relative',overflow:'hidden'}} onClick={()=>stack.length>1&&zoomTo(stack.length-2)}>
-              {/* Show dream image subtly in center if available */}
-              {stack.length===1&&data.dream.image&&<img src={data.dream.image} alt="" style={{position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover',opacity:.15}} onError={()=>{}} />}
-              <span style={{fontFamily:"'Noto Serif TC',serif",fontSize:current.title.length>7?12:14,fontWeight:400,color:'#F8F6F1',textAlign:'center',lineHeight:1.7,letterSpacing:'.05em',padding:'0 18px',position:'relative'}}>{current.title}</span>
-            </div>
-            {stack.length>1&&<div style={{textAlign:'center',marginTop:8,fontSize:10,color:'#C0B8AE',letterSpacing:'.06em'}}>點擊返回</div>}
-          </div>
-          {slots.map((node,i)=>{const pos=positions[i];return(<OrbitNode key={node?node.id:'empty_'+i} node={node} pos={pos} delay={phase==='enter'?i*25:0} isPlaceholder={!node} onZoomIn={()=>node?zoomIn(node):addNode(currentLayer,current.id)} onEdit={()=>node&&setEditTarget({node,layer:currentLayer,parentId:current.id})}/>);})}
-        </div>
-      </div>
-
-      {stack.length===1&&phase==='idle'&&<div style={{textAlign:'center',padding:'0 0 16px',fontSize:11,color:'#C8C0B4',letterSpacing:'.08em',flexShrink:0}}>點擊節點展開 · 點右上角 ✎ 進行編輯</div>}
-
-      {editTarget&&(
-        <EditDialog node={editTarget.node} onSave={u=>updateNode(editTarget.layer,editTarget.parentId,u)} onDelete={id=>deleteNode(editTarget.layer,editTarget.parentId,id)} onClose={()=>setEditTarget(null)} support={support} onSupportChange={onSupportChange} />
-      )}
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════════════════
-   HOME PAGE
-════════════════════════════════════════════════════════ */
-function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage, onJumpDomain }) {
-  const today   = todayKey();
-  const weekEnd = new Date(); weekEnd.setDate(weekEnd.getDate()+7);
-  const weekStr = weekEnd.toISOString().slice(0,10);
-
-  const todayEvs    = calEvents.filter(e=>e.date===today);
-  const monthEvs    = calEvents.filter(e=>e.date.startsWith(today.slice(0,7))).sort((a,b)=>a.date.localeCompare(b.date));
-  const upcomingEvs = calEvents.filter(e=>e.date>today&&e.date<=weekStr).sort((a,b)=>a.date.localeCompare(b.date));
-
-  const allActions = useMemo(()=>{
-    const r=[];
-    demData.domains.forEach(dom=>{
-      (demData.projects[dom.id]||[]).forEach(proj=>{
-        (demData.actions[proj.id]||[]).forEach(a=>{
-          r.push({...a,domainTitle:dom.title,projectTitle:proj.title});
-        });
-      });
-    });
-    return r;
-  },[demData]);
-
-  const weekCounts = {
-    todo:  allActions.filter(a=>a.status==='todo').length,
-    doing: allActions.filter(a=>a.status==='doing').length,
-    done:  allActions.filter(a=>a.status==='done').length,
-  };
-  const recentDone = allActions.filter(a=>a.status==='done').sort((a,b)=>(b.completedAt||'').localeCompare(a.completedAt||'')).slice(0,3);
-
-  // Domain cards grouped by owner
-  const domainsByOwner = useMemo(()=>{
-    const groups = { apple:[], pine:[], us:[] };
-    demData.domains.forEach(dom=>{
-      const o = dom.owner||'us';
-      if (groups[o]) groups[o].push(dom);
-    });
-    return groups;
-  },[demData]);
-
-  function SectionHeader({ emoji, label, action }) {
-    return (
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:9}}>
-        <p style={{fontSize:12,fontWeight:500,color:'#2D2820',display:'flex',alignItems:'center',gap:5}}>
-          <span>{emoji}</span>{label}
-        </p>
-        {action}
-      </div>
-    );
-  }
-
-  return (
-    <div className="page-scroll">
-      <div style={{padding:'18px 16px 48px',maxWidth:640,margin:'0 auto'}}>
-
-        {/* ── Header ── */}
-        <div style={{marginBottom:18}}>
-          <p style={{fontSize:10,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:2}}>{todayLabel()}</p>
-          <h1 style={{fontFamily:"'Noto Serif TC',serif",fontSize:19,fontWeight:400,color:'#2D2820'}}>早安，蘋果派 & 松果 ✦</h1>
-        </div>
-
-        {/* ── 今日狀態 ── */}
-        <div style={{marginBottom:18}}>
-          <SectionHeader emoji="✨" label="今日狀態" />
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-            {[APPLE,PINE].map(p=>{
-              const st=todayStatus[p.key], isHigh=st.stress==='high';
-              const evs=todayEvs.filter(e=>e.owner===p.key||e.owner==='us');
-              return (
-                <div key={p.key} className="card" style={{padding:'12px 14px'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:7}}>
-                    <span style={{width:8,height:8,borderRadius:'50%',background:p.color,display:'inline-block'}}></span>
-                    <span style={{fontSize:12,fontWeight:500,color:'#2D2820'}}>{p.name}</span>
-                    <span style={{marginLeft:'auto',fontSize:10,padding:'1px 6px',borderRadius:9,background:isHigh?'rgba(192,136,122,.12)':'rgba(91,163,123,.12)',color:isHigh?'#C0887A':'#5BA37B'}}>{isHigh?'🔴高壓':'●一般'}</span>
-                  </div>
-                  {evs.length===0?<p style={{fontSize:11,color:'#C0B8AE'}}>今天沒有安排</p>
-                    :evs.slice(0,2).map(e=><p key={e.id} style={{fontSize:11,color:'#7D7468',marginBottom:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>· {e.title}</p>)}
-                  <button onClick={()=>setTodayStatus(p.key,'stress',isHigh?'normal':'high')}
-                    style={{marginTop:8,fontSize:9,padding:'2px 7px',borderRadius:8,border:`1px solid ${isHigh?'#C0887A':'#E0D9CF'}`,background:'none',color:isHigh?'#C0887A':'#A09688',cursor:'pointer'}}>
-                    {isHigh?'切換為一般':'標記高壓'}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* ── 本週共同待辦 ── */}
-        <div style={{marginBottom:18}}>
-          <SectionHeader emoji="🟨" label="本週共同待辦" action={<button onClick={()=>setPage('projects')} style={{fontSize:10,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>看板 →</button>} />
-          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
-            {[
-              {label:'待開始',count:weekCounts.todo,  color:'#A09688'},
-              {label:'進行中',count:weekCounts.doing, color:'#C07040'},
-              {label:'已完成',count:weekCounts.done,  color:'#2D4A3E'},
-            ].map(s=>(
-              <button key={s.label} onClick={()=>setPage('projects')} className="card"
-                style={{padding:'11px 12px',textAlign:'left',border:'none',cursor:'pointer',background:'rgba(255,255,255,.85)'}}>
-                <p style={{fontSize:18,fontWeight:600,color:s.color,fontFamily:"'Noto Serif TC',serif"}}>{s.count}</p>
-                <p style={{fontSize:10,color:'#A09688',marginTop:2}}>{s.label}</p>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* ── 本月重要事件 ── */}
-        {monthEvs.length>0&&(
-          <div style={{marginBottom:18}}>
-            <SectionHeader emoji="📅" label="本月重要事件" action={<button onClick={()=>setPage('calendar')} style={{fontSize:10,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>月曆 →</button>} />
-            <div style={{display:'flex',flexDirection:'column',gap:6}}>
-              {monthEvs.slice(0,5).map(e=>{
-                const o=PEOPLE[e.owner]||PEOPLE.us;
-                const [,mm,dd]=e.date.split('-');
-                const ownerEmoji=e.owner==='apple'?'🍎':e.owner==='pine'?'🌲':'🤝';
-                return (
-                  <div key={e.id} className="card" style={{padding:'9px 12px',display:'flex',alignItems:'center',gap:10}}>
-                    <div style={{width:32,height:32,borderRadius:7,background:'rgba(45,74,62,.07)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                      <span style={{fontSize:8,color:'#A09688',lineHeight:1}}>{mm}月</span>
-                      <span style={{fontSize:13,fontWeight:600,color:'#2D4A3E',lineHeight:1.2}}>{dd}</span>
-                    </div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <p style={{fontSize:12,color:'#2D2820',fontWeight:500}}>{e.title}</p>
-                      <p style={{fontSize:10,color:'#A09688',marginTop:1}}>{ownerEmoji} {o.name}{e.stress==='high'?' · 🔴':''}{e.tags?.length?' · '+e.tags.join('、'):''}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* ── 人生夢想 ── */}
-        <div style={{marginBottom:18}}>
-          <SectionHeader emoji="🌱" label="人生夢想" action={<button onClick={()=>setPage('dream')} style={{fontSize:10,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>展開圖 →</button>} />
-          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
-            {[
-              { key:'apple', emoji:'🍎', label:'蘋果派', color:'#E8956D', lightBg:'rgba(232,149,109,.06)' },
-              { key:'pine',  emoji:'🌲', label:'松果',   color:'#5A8F7B', lightBg:'rgba(90,143,123,.06)'  },
-              { key:'us',    emoji:'🤝', label:'我們',   color:'#8B7BAF', lightBg:'rgba(139,123,175,.06)' },
-            ].map(col=>{
-              const doms = domainsByOwner[col.key]||[];
-              return (
-                <div key={col.key} className="card" style={{padding:'10px 11px',background:col.lightBg}}>
-                  <p style={{fontSize:13,marginBottom:6}}>{col.emoji} <span style={{fontSize:11,color:'#2D2820',fontWeight:500}}>{col.label}</span></p>
-                  {doms.length===0
-                    ? <p style={{fontSize:10,color:'#C0B8AE'}}>尚無領域</p>
-                    : doms.map(dom=>(
-                      <button key={dom.id} onClick={()=>onJumpDomain(dom.id, dom.title)}
-                        style={{display:'block',width:'100%',textAlign:'left',background:'none',border:'none',cursor:'pointer',
-                          fontSize:11,color:'#3D3830',padding:'3px 0',lineHeight:1.5,
-                          borderBottom:'1px solid rgba(180,172,160,.15)'}}
-                        onMouseEnter={e=>e.target.style.color=col.color}
-                        onMouseLeave={e=>e.target.style.color='#3D3830'}>
-                        {dom.title}
-                      </button>
-                    ))}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* ── 最近完成 ── */}
-        <div style={{marginBottom:18}}>
-          <SectionHeader emoji="✅" label="最近完成" action={<button onClick={()=>setPage('memories')} style={{fontSize:10,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>回憶牆 →</button>} />
-          {recentDone.length===0
-            ? (
-              <button onClick={()=>setPage('projects')} className="card" style={{padding:'14px 16px',width:'100%',textAlign:'center',border:'none',cursor:'pointer',color:'#C0B8AE',fontSize:12,background:'rgba(255,255,255,.7)'}}>
-                完成一個行動，這裡就會出現記錄 →
-              </button>
-            ) : (
-              <div style={{display:'flex',flexDirection:'column',gap:5}}>
-                {recentDone.map(a=>{
-                  const asn=PEOPLE[a.assignee]||PEOPLE.us;
-                  const ownerEmoji=a.assignee==='apple'?'🍎':a.assignee==='pine'?'🌲':'🤝';
-                  return (
-                    <div key={a.id} className="card" style={{padding:'9px 12px',display:'flex',alignItems:'center',gap:8}}>
-                      <span style={{fontSize:11,color:'#2D4A3E',flexShrink:0}}>✓</span>
-                      <div style={{flex:1,minWidth:0}}>
-                        <p style={{fontSize:12,color:'#2D2820',fontWeight:500}}>{a.title}</p>
-                        <p style={{fontSize:10,color:'#A09688',marginTop:1}}>{ownerEmoji} {a.domainTitle} › {a.projectTitle}</p>
-                      </div>
-                      {a.completedAt&&<span style={{fontSize:9,color:'#C0B8AE',flexShrink:0}}>{a.completedAt.slice(5)}</span>}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-        </div>
-
-        {/* ── Dream Map 入口 ── */}
-        <button onClick={()=>setPage('dream')} style={{width:'100%',background:'#2D4A3E',border:'none',borderRadius:13,padding:'14px 18px',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer'}}
-          onMouseEnter={e=>e.currentTarget.style.background='#3A5F4E'} onMouseLeave={e=>e.currentTarget.style.background='#2D4A3E'}>
-          <div style={{textAlign:'left'}}>
-            <p style={{fontFamily:"'Noto Serif TC',serif",fontSize:13,color:'#F8F6F1',fontWeight:400}}>人生夢想展開圖</p>
-            <p style={{fontSize:10,color:'rgba(248,246,241,.55)',marginTop:2}}>共創理想生活 · {demData.domains.length} 個人生領域</p>
-          </div>
-          <span style={{fontSize:18,color:'rgba(248,246,241,.6)'}}>✦ →</span>
+        <button onClick={async()=>{
+          if(!window.confirm('確定要清除所有資料並重新開始嗎？\n（此動作無法復原）')) return;
+          try { if(IS_CONFIGURED) await clearSheetsData(); } catch(e){}
+          localStorage.clear();
+          window.location.reload();
+        }} title="清除資料重新開始" style={{marginTop:6,width:36,height:36,borderRadius:10,border:'none',background:'rgba(192,136,122,.25)',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',color:'rgba(248,246,241,.7)',fontSize:13}}>
+          ✕
         </button>
-
-      </div>
-    </div>
-  );
-}
-
-
-/* ════════════════════════════════════════════════════════
-   CALENDAR PAGE
-════════════════════════════════════════════════════════ */
-function CalendarPage({ calEvents, setCalEvents }) {
-  const now = new Date();
-  const [year, setYear]   = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth());
-  const [selDay, setSelDay] = useState(null);
-
-  function changeMonth(d) { let m=month+d,y=year; if(m<0){m=11;y--;} if(m>11){m=0;y++;} setMonth(m);setYear(y); }
-  const cells = monthGrid(year,month);
-  const today = todayKey();
-
-  return (
-    <div className="page-scroll">
-      <div style={{padding:'24px 24px 40px',maxWidth:560,margin:'0 auto'}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:22}}>
-          <button onClick={()=>changeMonth(-1)} style={{background:'none',border:'1.5px solid #E0D9CF',borderRadius:9,padding:'6px 12px',cursor:'pointer',color:'#7D7468',fontSize:16}}>‹</button>
-          <h2 style={{fontFamily:"'Noto Serif TC',serif",fontSize:18,fontWeight:400,color:'#2D2820'}}>{year} 年 {MONTHS[month]}</h2>
-          <button onClick={()=>changeMonth(1)} style={{background:'none',border:'1.5px solid #E0D9CF',borderRadius:9,padding:'6px 12px',cursor:'pointer',color:'#7D7468',fontSize:16}}>›</button>
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',textAlign:'center',marginBottom:6}}>
-          {DAYS.map(d=><div key={d} style={{fontSize:11,color:'#A09688',padding:'3px 0'}}>{d}</div>)}
-        </div>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:3}}>
-          {cells.map((day,i)=>{
-            if(!day) return <div key={i}></div>;
-            const dk=toKey(year,month,day);
-            const evs=calEvents.filter(e=>e.date===dk);
-            const isToday=dk===today;
-            return (
-              <button key={i} onClick={()=>setSelDay(dk)} style={{aspectRatio:'1',borderRadius:9,border:`1.5px solid ${isToday?'#2D4A3E':'rgba(180,172,160,.35)'}`,background:isToday?'rgba(45,74,62,.06)':'rgba(255,255,255,.7)',display:'flex',flexDirection:'column',alignItems:'center',padding:'5px 2px',cursor:'pointer',transition:'all .15s'}}>
-                <span style={{fontSize:12,fontWeight:isToday?600:400,color:isToday?'#2D4A3E':'#3D3830'}}>{day}</span>
-                <div style={{display:'flex',gap:2,marginTop:2,flexWrap:'wrap',justifyContent:'center'}}>
-                  {evs.slice(0,3).map(e=>{const p=PEOPLE[e.owner]||PEOPLE.us;return<span key={e.id} style={{width:5,height:5,borderRadius:'50%',background:p.color,display:'inline-block'}}></span>;})}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-        <div style={{marginTop:18,display:'flex',gap:14,flexWrap:'wrap'}}>
-          {[APPLE,PINE,US].map(p=><span key={p.key} style={{display:'flex',alignItems:'center',gap:5,fontSize:11,color:'#A09688'}}><span style={{width:7,height:7,borderRadius:'50%',background:p.color,display:'inline-block'}}></span>{p.name}</span>)}
-        </div>
-      </div>
-      {selDay&&<DayModal dateKey={selDay} events={calEvents} setEvents={setCalEvents} onClose={()=>setSelDay(null)} />}
-    </div>
-  );
-}
-
-/* EventForm lives outside DayModal so it never remounts on parent re-render — this fixes the IME bug */
-function EventForm({ form, setForm, onSave, onCancel, saveLabel }) {
-  return (
-    <div style={{border:'1.5px solid #E0D9CF',borderRadius:11,padding:14,display:'flex',flexDirection:'column',gap:10,background:'rgba(255,255,255,.8)'}}>
-      <input
-        value={form.title}
-        onChange={e=>setForm(f=>({...f,title:e.target.value}))}
-        placeholder="事件標題"
-        autoFocus
-      />
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9}}>
-        <input type="time" value={form.time} onChange={e=>setForm(f=>({...f,time:e.target.value}))} />
-        <select value={form.owner} onChange={e=>setForm(f=>({...f,owner:e.target.value}))}>
-          <option value="apple">🍎 蘋果派</option>
-          <option value="pine">🌲 松果</option>
-          <option value="us">🤝 我們</option>
-        </select>
-      </div>
-      <select value={form.stress} onChange={e=>setForm(f=>({...f,stress:e.target.value}))}>
-        <option value="normal">一般</option>
-        <option value="high">🔴 高壓日</option>
-      </select>
-      <input
-        value={form.tags}
-        onChange={e=>setForm(f=>({...f,tags:e.target.value}))}
-        placeholder="標籤（逗號分隔，如：出差,不回家,約會）"
-      />
-      <input
-        value={form.note}
-        onChange={e=>setForm(f=>({...f,note:e.target.value}))}
-        placeholder="備註（選填）"
-      />
-      <div style={{display:'flex',gap:8}}>
-        <button onClick={onSave} className="btn-primary" style={{flex:1}}>{saveLabel||'儲存'}</button>
-        <button onClick={onCancel} className="btn-ghost">取消</button>
-      </div>
-    </div>
-  );
-}
-
-function DayModal({ dateKey, events, setEvents, onClose }) {
-  const [editId,   setEditId]  = useState(null);
-  const [showAdd,  setShowAdd] = useState(false);
-  const emptyForm = { title:'', time:'19:00', owner:'us', stress:'normal', tags:'', note:'' };
-  const [form, setForm] = useState(emptyForm);
-
-  const dayEvs = events.filter(e=>e.date===dateKey).sort((a,b)=>a.time.localeCompare(b.time));
-
-  function startEdit(ev) {
-    setEditId(ev.id);
-    setForm({ title:ev.title, time:ev.time, owner:ev.owner, stress:ev.stress, tags:(ev.tags||[]).join(','), note:ev.note||'' });
-    setShowAdd(false);
-  }
-  function startAdd() {
-    setEditId(null); setForm(emptyForm); setShowAdd(true);
-  }
-  function formToEvent(f) {
-    return { title:f.title.trim(), time:f.time, owner:f.owner, stress:f.stress, tags:f.tags.split(',').map(t=>t.trim()).filter(Boolean), note:f.note };
-  }
-  function saveEdit() {
-    if (!form.title.trim()) return;
-    setEvents(prev=>prev.map(e=>e.id===editId ? {...e,...formToEvent(form)} : e));
-    setEditId(null);
-  }
-  function saveAdd() {
-    if (!form.title.trim()) return;
-    setEvents(prev=>[...prev, {id:uid(), date:dateKey, ...formToEvent(form)}]);
-    setForm(emptyForm); setShowAdd(false);
-  }
-  function deleteEvent(id) {
-    if (window.confirm('確定要刪除這個事件嗎？')) {
-      setEvents(prev=>prev.filter(e=>e.id!==id));
-      if (editId===id) setEditId(null);
-    }
-  }
-
-  return (
-    <div onClick={onClose} style={{position:'fixed',inset:0,zIndex:100,background:'rgba(45,40,35,.22)',backdropFilter:'blur(6px)',display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:'#FDFAF5',borderRadius:'20px 20px 0 0',padding:'22px',width:'100%',maxWidth:460,maxHeight:'85vh',overflowY:'auto',animation:'dialogIn .2s both'}}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:18}}>
-          <h3 style={{fontSize:15,fontWeight:500,color:'#2D2820'}}>{dateKey}</h3>
-          <button onClick={onClose} style={{background:'none',border:'none',fontSize:18,color:'#A09688',cursor:'pointer'}}>×</button>
-        </div>
-
-        {dayEvs.length===0&&!showAdd&&!editId&&<p style={{fontSize:13,color:'#C0B8AE',textAlign:'center',padding:'14px 0'}}>這天還沒有事件</p>}
-
-        <div style={{display:'flex',flexDirection:'column',gap:7,marginBottom:14}}>
-          {dayEvs.map(ev=>{
-            const p=PEOPLE[ev.owner]||PEOPLE.us;
-            if (editId===ev.id) {
-              return (
-                <div key={ev.id}>
-                  <p style={{fontSize:11,color:'#A09688',marginBottom:6}}>✎ 編輯事件</p>
-                  <EventForm form={form} setForm={setForm} onSave={saveEdit} onCancel={()=>setEditId(null)} saveLabel="更新" />
-                </div>
-              );
-            }
-            return (
-              <div key={ev.id} style={{background:'rgba(255,255,255,.8)',border:'1.5px solid #E0D9CF',borderRadius:11,padding:'11px 13px'}}>
-                <div style={{display:'flex',alignItems:'flex-start',gap:8}}>
-                  <span style={{fontSize:14,flexShrink:0,marginTop:1}}>{p===PEOPLE.apple?'🍎':p===PEOPLE.pine?'🌲':'🤝'}</span>
-                  <div style={{flex:1,minWidth:0}}>
-                    <p style={{fontSize:13,fontWeight:500,color:'#2D2820'}}>{ev.title}</p>
-                    <p style={{fontSize:11,color:'#A09688',marginTop:2}}>
-                      {ev.time} · {p.name}
-                      {ev.stress==='high'?' · 🔴 高壓':''}
-                      {ev.tags?.length?' · '+ev.tags.join('、'):''}
-                    </p>
-                    {ev.note&&<p style={{fontSize:11,color:'#7D7468',marginTop:2}}>{ev.note}</p>}
-                  </div>
-                  <div style={{display:'flex',gap:4,flexShrink:0}}>
-                    <button onClick={()=>startEdit(ev)} style={{background:'none',border:'1px solid #E0D9CF',borderRadius:7,padding:'3px 8px',fontSize:11,color:'#A09688',cursor:'pointer'}}>編輯</button>
-                    <button onClick={()=>deleteEvent(ev.id)} style={{background:'none',border:'1px solid rgba(192,136,122,.3)',borderRadius:7,padding:'3px 8px',fontSize:11,color:'#C0887A',cursor:'pointer'}}>刪除</button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {showAdd
-          ? <EventForm form={form} setForm={setForm} onSave={saveAdd} onCancel={()=>setShowAdd(false)} saveLabel="新增事件" />
-          : <button onClick={startAdd} style={{width:'100%',background:'none',border:'1.5px dashed #D8D0C4',borderRadius:11,padding:'11px',fontSize:13,color:'#A09688',cursor:'pointer'}}>＋ 新增事件</button>}
-      </div>
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════════════════
-   PROJECTS PAGE
-════════════════════════════════════════════════════════ */
-
-/* ════════════════════════════════════════════════════════
-   PROJECT HELPERS
-════════════════════════════════════════════════════════ */
-function getProjectStats(projectId, demData) {
-  const acts  = demData.actions[projectId] || [];
-  const total = acts.length;
-  const done  = acts.filter(a => a.status === 'done').length;
-  const next  = acts.find(a => a.status !== 'done') || null;
-  return { total, done, next };
-}
-
-function flattenProjects(demData) {
-  const r = [];
-  demData.domains.forEach(dom => {
-    (demData.projects[dom.id] || []).forEach(proj => {
-      r.push({
-        ...proj,
-        status:     proj.status    || 'todo',
-        owner:      proj.owner     || 'us',
-        dueDate:    proj.dueDate   || null,
-        domainId:   dom.id,
-        domainTitle:dom.title,
-      });
-    });
-  });
-  return r;
-}
-
-function updateProjectInDem(setDemData, domainId, projectId, updates) {
-  setDemData(d => ({
-    ...d,
-    projects: {
-      ...d.projects,
-      [domainId]: (d.projects[domainId] || []).map(p =>
-        p.id === projectId ? { ...p, ...updates } : p
-      ),
-    },
-  }));
-}
-
-/* ════════════════════════════════════════════════════════
-   PROJECT DETAIL MODAL
-════════════════════════════════════════════════════════ */
-function ProjectDetailModal({ project, demData, setDemData, onClose }) {
-  const [form, setForm] = useState({
-    title:  project.title,
-    desc:   project.desc  || '',
-    owner:  project.owner || 'us',
-    dueDate:project.dueDate || '',
-    status: project.status || 'todo',
-  });
-  const [newAction, setNewAction] = useState('');
-  const actions = demData.actions[project.id] || [];
-  const { total, done } = getProjectStats(project.id, demData);
-  const pct = total > 0 ? Math.round(done / total * 100) : 0;
-  const todoActs = actions.filter(a => a.status !== 'done');
-  const doneActs = actions.filter(a => a.status === 'done');
-
-  function save() {
-    if (!form.title.trim()) return;
-    updateProjectInDem(setDemData, project.domainId, project.id, {
-      title: form.title.trim(), desc: form.desc,
-      owner: form.owner, dueDate: form.dueDate, status: form.status,
-    });
-    onClose();
-  }
-  function addAction() {
-    if (!newAction.trim()) return;
-    setDemData(d => ({
-      ...d,
-      actions: { ...d.actions, [project.id]: [...(d.actions[project.id]||[]), makeAction(newAction.trim())] },
-    }));
-    setNewAction('');
-  }
-  function toggleAction(id) {
-    setDemData(d => ({
-      ...d,
-      actions: {
-        ...d.actions,
-        [project.id]: (d.actions[project.id]||[]).map(a =>
-          a.id === id ? { ...a, status: a.status==='done'?'todo':'done', completedAt: a.status!=='done'?todayKey():null } : a
-        ),
-      },
-    }));
-  }
-  function deleteAction(id) {
-    setDemData(d => ({
-      ...d,
-      actions: { ...d.actions, [project.id]: (d.actions[project.id]||[]).filter(a => a.id!==id) },
-    }));
-  }
-  function deleteProject() {
-    if (!window.confirm('確定要刪除這個專案嗎？')) return;
-    setDemData(d => ({
-      ...d,
-      projects: { ...d.projects, [project.domainId]: (d.projects[project.domainId]||[]).filter(p => p.id!==project.id) },
-    }));
-    onClose();
-  }
-
-  return (
-    <div onClick={onClose} style={{position:'fixed',inset:0,zIndex:100,background:'rgba(45,40,35,.25)',backdropFilter:'blur(6px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:'#FDFAF5',borderRadius:20,width:'100%',maxWidth:500,maxHeight:'88vh',overflow:'hidden',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(45,40,35,.18)',animation:'dialogIn .22s both'}}>
-        {/* Header */}
-        <div style={{padding:'18px 20px 12px',borderBottom:'1px solid #EDE8E0',flexShrink:0}}>
-          <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8,marginBottom:8}}>
-            <div style={{flex:1,minWidth:0}}>
-              <p style={{fontSize:10,color:'#A09688',marginBottom:4,letterSpacing:'.08em',textTransform:'uppercase'}}>{project.domainTitle}</p>
-              <input value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))}
-                style={{fontSize:16,fontWeight:500,color:'#2D2820',border:'none',background:'transparent',padding:0,width:'100%',outline:'none',fontFamily:'inherit'}} />
-            </div>
-            <button onClick={onClose} style={{background:'none',border:'none',fontSize:18,color:'#A09688',cursor:'pointer',flexShrink:0}}>×</button>
-          </div>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <div style={{flex:1,height:4,background:'rgba(180,172,160,.25)',borderRadius:4,overflow:'hidden'}}>
-              <div style={{height:'100%',width:`${pct}%`,background:'#2D4A3E',borderRadius:4,transition:'width .3s'}}></div>
-            </div>
-            <span style={{fontSize:11,color:'#A09688',flexShrink:0}}>{done}/{total}</span>
-          </div>
-        </div>
-
-        {/* Body */}
-        <div style={{overflowY:'auto',flex:1,padding:'14px 20px'}}>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:14}}>
-            {[
-              { label:'負責人', el:<select value={form.owner} onChange={e=>setForm(f=>({...f,owner:e.target.value}))} style={{fontSize:11,padding:'4px 6px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF',width:'100%'}}>
-                  <option value="apple">🍎 蘋果派</option><option value="pine">🌲 松果</option><option value="us">🤝 我們</option>
-                </select> },
-              { label:'截止日期', el:<input type="date" value={form.dueDate} onChange={e=>setForm(f=>({...f,dueDate:e.target.value}))} style={{fontSize:11,padding:'4px 6px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF',width:'100%'}} /> },
-              { label:'狀態', el:<select value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))} style={{fontSize:11,padding:'4px 6px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF',width:'100%'}}>
-                  <option value="todo">待開始</option><option value="doing">進行中</option><option value="done">已完成</option>
-                </select> },
-            ].map(({label,el})=>(
-              <div key={label}><p style={{fontSize:9,color:'#A09688',marginBottom:3}}>{label}</p>{el}</div>
-            ))}
-          </div>
-          <textarea value={form.desc} onChange={e=>setForm(f=>({...f,desc:e.target.value}))} rows={2} placeholder="專案備註…"
-            style={{fontSize:12,width:'100%',borderRadius:8,border:'1px solid #E0D9CF',padding:'8px 10px',resize:'none',fontFamily:'inherit',lineHeight:1.6,marginBottom:14}} />
-
-          {/* Actions */}
-          <p style={{fontSize:10,color:'#A09688',marginBottom:7,letterSpacing:'.08em',textTransform:'uppercase'}}>行動項目 · {total} 個</p>
-          <div style={{display:'flex',gap:6,marginBottom:8}}>
-            <input value={newAction} onChange={e=>setNewAction(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addAction()} placeholder="新增行動項目…"
-              style={{flex:1,fontSize:12,padding:'6px 10px',borderRadius:8,border:'1px solid #E0D9CF'}} />
-            <button onClick={addAction} style={{background:'#2D4A3E',color:'#F8F6F1',border:'none',borderRadius:8,padding:'6px 12px',fontSize:12,cursor:'pointer'}}>＋</button>
-          </div>
-          <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:8}}>
-            {todoActs.map(a=>(
-              <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'rgba(255,255,255,.6)',borderRadius:8,border:'1px solid rgba(180,172,160,.25)'}}>
-                <button onClick={()=>toggleAction(a.id)} style={{width:15,height:15,borderRadius:3,border:'1.5px solid #C8C0B4',background:'none',cursor:'pointer',flexShrink:0}}></button>
-                <span style={{flex:1,fontSize:12,color:'#2D2820'}}>{a.title}</span>
-                <button onClick={()=>deleteAction(a.id)} style={{background:'none',border:'none',fontSize:12,color:'#C8C0B4',cursor:'pointer'}}>×</button>
-              </div>
-            ))}
-          </div>
-          {doneActs.length>0&&(
-            <div style={{display:'flex',flexDirection:'column',gap:4}}>
-              <p style={{fontSize:10,color:'#C0B8AE',marginBottom:2}}>已完成 ({doneActs.length})</p>
-              {doneActs.map(a=>(
-                <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'rgba(45,74,62,.04)',borderRadius:8}}>
-                  <button onClick={()=>toggleAction(a.id)} style={{width:15,height:15,borderRadius:3,border:'none',background:'#2D4A3E',cursor:'pointer',flexShrink:0,color:'#F8F6F1',fontSize:9,display:'flex',alignItems:'center',justifyContent:'center'}}>✓</button>
-                  <span style={{flex:1,fontSize:12,color:'#A09688',textDecoration:'line-through'}}>{a.title}</span>
-                  <button onClick={()=>deleteAction(a.id)} style={{background:'none',border:'none',fontSize:12,color:'#C8C0B4',cursor:'pointer'}}>×</button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div style={{padding:'10px 20px',borderTop:'1px solid #EDE8E0',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
-          <button onClick={deleteProject} style={{background:'none',border:'none',fontSize:12,color:'#C0887A',cursor:'pointer',fontFamily:'inherit'}}>刪除專案</button>
-          <div style={{display:'flex',gap:7}}>
-            <button onClick={onClose} style={{background:'none',border:'1.5px solid #E0D9CF',borderRadius:9,padding:'6px 12px',fontSize:12,color:'#7D7468',cursor:'pointer'}}>取消</button>
-            <button onClick={save} style={{background:'#2D4A3E',color:'#F8F6F1',border:'none',borderRadius:9,padding:'6px 14px',fontSize:12,cursor:'pointer'}}>儲存</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════════════════
-   PROJECT CARD
-════════════════════════════════════════════════════════ */
-function ProjectCard({ project, demData, onOpen, onStatusChange, dragging, onDragStart, onDragEnd }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const { total, done, next } = getProjectStats(project.id, demData);
-  const pct = total > 0 ? Math.round(done / total * 100) : 0;
-  const ownerEmoji = project.owner==='apple'?'🍎':project.owner==='pine'?'🌲':'🤝';
-
-  return (
-    <div
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      onClick={() => { if (!menuOpen) onOpen(); }}
-      style={{
-        background: dragging ? 'rgba(255,255,255,.6)' : 'rgba(255,255,255,.88)',
-        border: '1.5px solid rgba(180,172,160,.35)',
-        borderRadius: 12,
-        padding: '12px 13px',
-        cursor: 'grab',
-        transition: 'box-shadow .15s, transform .15s',
-        boxShadow: dragging ? '0 10px 28px rgba(45,40,35,.20)' : '0 1px 4px rgba(45,40,35,.06)',
-        transform: dragging ? 'scale(1.03) rotate(.8deg)' : 'scale(1)',
-        opacity: dragging ? .88 : 1,
-        userSelect: 'none',
-        position: 'relative',
-      }}
-    >
-      {/* Domain label */}
-      <p style={{fontSize:9,color:'#A09688',marginBottom:4,letterSpacing:'.06em',textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-        {project.domainTitle}
-      </p>
-
-      {/* Title + menu */}
-      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:4,marginBottom:8}}>
-        <p style={{fontSize:13,fontWeight:500,color:'#2D2820',lineHeight:1.4,flex:1}}>{project.title}</p>
-        <button onClick={e=>{e.stopPropagation();setMenuOpen(m=>!m);}}
-          style={{background:'none',border:'none',fontSize:15,color:'#C0B8AE',cursor:'pointer',padding:'0 2px',lineHeight:1,flexShrink:0}}>⋮</button>
-      </div>
-
-      {/* Context menu */}
-      {menuOpen && (
-        <div onClick={e=>e.stopPropagation()}
-          style={{position:'absolute',top:36,right:8,background:'#FDFAF5',border:'1px solid #E0D9CF',borderRadius:10,padding:'5px 0',zIndex:20,boxShadow:'0 4px 16px rgba(45,40,35,.14)',minWidth:110}}>
-          {['todo','doing','done'].map(s=>(
-            <button key={s} onClick={()=>{onStatusChange(s);setMenuOpen(false);}}
-              style={{display:'block',width:'100%',background:'none',border:'none',textAlign:'left',padding:'6px 13px',fontSize:11,color:project.status===s?'#2D4A3E':'#3D3830',cursor:'pointer',fontFamily:'inherit',fontWeight:project.status===s?600:400}}>
-              {project.status===s?'✓ ':''}{s==='todo'?'待開始':s==='doing'?'進行中':'已完成'}
-            </button>
-          ))}
-          <div style={{height:1,background:'#EDE8E0',margin:'3px 0'}}></div>
-          <button onClick={()=>{onOpen();setMenuOpen(false);}}
-            style={{display:'block',width:'100%',background:'none',border:'none',textAlign:'left',padding:'6px 13px',fontSize:11,color:'#3D3830',cursor:'pointer',fontFamily:'inherit'}}>
-            ✎ 編輯
-          </button>
-        </div>
-      )}
-
-      {/* Owner + due date */}
-      <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:total>0?8:0,flexWrap:'wrap'}}>
-        <span style={{fontSize:13}}>{ownerEmoji}</span>
-        {project.dueDate&&<span style={{fontSize:10,color:'#A09688'}}>📅 {project.dueDate.slice(5).replace('-','/')}</span>}
-      </div>
-
-      {/* Progress bar */}
-      {total > 0 && (
-        <div style={{marginBottom:next?7:0}}>
-          <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
-            <span style={{fontSize:9,color:'#A09688'}}>進度</span>
-            <span style={{fontSize:9,color:'#A09688'}}>{done}/{total}</span>
-          </div>
-          <div style={{height:3,background:'rgba(180,172,160,.22)',borderRadius:3,overflow:'hidden'}}>
-            <div style={{height:'100%',width:`${pct}%`,background:'#2D4A3E',borderRadius:3}}></div>
-          </div>
-        </div>
-      )}
-
-      {/* Next action */}
-      {next && (
-        <p style={{fontSize:10,color:'#7D7468',marginTop:7,padding:'4px 8px',background:'rgba(180,172,160,.1)',borderRadius:6,lineHeight:1.4}}>
-          <span style={{color:'#A09688'}}>下一步 · </span>{next.title}
-        </p>
-      )}
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════════════════
-   PROJECTS PAGE — Kanban
-════════════════════════════════════════════════════════ */
-/* ════════════════════════════════════════════════════════
-   ACTION HELPERS (for Kanban)
-════════════════════════════════════════════════════════ */
-function flattenActions(demData) {
-  const r = [];
-  demData.domains.forEach(dom => {
-    (demData.projects[dom.id]||[]).forEach(proj => {
-      (demData.actions[proj.id]||[]).forEach(a => {
-        r.push({
-          ...a,
-          domainId:   dom.id,
-          domainTitle:dom.title,
-          projectId:  proj.id,
-          projectTitle:proj.title,
-        });
-      });
-    });
-  });
-  return r;
-}
-
-function updateActionInDem(setDemData, projectId, actionId, updates) {
-  setDemData(d => ({
-    ...d,
-    actions: {
-      ...d.actions,
-      [projectId]: (d.actions[projectId]||[]).map(a =>
-        a.id === actionId ? {...a,...updates} : a
-      ),
-    },
-  }));
-}
-
-/* ── Action Card ── */
-function ActionCard({ action, onOpen, dragging, onDragStart, onDragEnd }) {
-  const ownerEmoji = action.assignee==='apple'?'🍎':action.assignee==='pine'?'🌲':'🤝';
-  return (
-    <div
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      onClick={onOpen}
-      style={{
-        background: dragging?'rgba(255,255,255,.6)':'rgba(255,255,255,.88)',
-        border:'1.5px solid rgba(180,172,160,.32)',
-        borderRadius:10,
-        padding:'10px 12px',
-        cursor:'grab',
-        transition:'box-shadow .15s, transform .15s',
-        boxShadow: dragging?'0 8px 22px rgba(45,40,35,.18)':'0 1px 4px rgba(45,40,35,.05)',
-        transform: dragging?'scale(1.03) rotate(.6deg)':'scale(1)',
-        opacity: dragging?.88:1,
-        userSelect:'none',
-      }}
-    >
-      {/* Breadcrumb */}
-      <p style={{fontSize:9,color:'#A09688',marginBottom:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',letterSpacing:'.04em'}}>
-        {action.domainTitle} › {action.projectTitle}
-      </p>
-      {/* Title */}
-      <p style={{fontSize:12,fontWeight:500,color:'#2D2820',lineHeight:1.4,marginBottom:7}}>{action.title}</p>
-      {/* Meta */}
-      <div style={{display:'flex',alignItems:'center',gap:7,flexWrap:'wrap'}}>
-        <span style={{fontSize:12}}>{ownerEmoji}</span>
-        {action.dueDate&&<span style={{fontSize:9,color:'#A09688'}}>📅 {action.dueDate.slice(5).replace('-','/')}</span>}
-      </div>
-    </div>
-  );
-}
-
-/* ── Action Edit Modal ── */
-function ActionEditModal({ action, onSave, onClose }) {
-  const [form, setForm] = useState({
-    title:     action.title,
-    desc:      action.desc||'',
-    assignee:  action.assignee||'us',
-    dueDate:   action.dueDate||'',
-    status:    action.status||'todo',
-  });
-  function save() {
-    if (!form.title.trim()) return;
-    onSave({ ...action, ...form, title:form.title.trim() });
-    onClose();
-  }
-  return (
-    <div onClick={onClose} style={{position:'fixed',inset:0,zIndex:100,background:'rgba(45,40,35,.25)',backdropFilter:'blur(6px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:'#FDFAF5',borderRadius:18,padding:'22px',width:'100%',maxWidth:380,animation:'dialogIn .2s both'}}>
-        <h3 style={{fontSize:14,fontWeight:500,color:'#2D2820',marginBottom:14}}>編輯行動</h3>
-        <div style={{display:'flex',flexDirection:'column',gap:9}}>
-          <input value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} onKeyDown={e=>e.key==='Enter'&&save()} placeholder="行動名稱" />
-          <textarea value={form.desc} onChange={e=>setForm(f=>({...f,desc:e.target.value}))} placeholder="備註（選填）" rows={2} style={{fontSize:12,padding:'8px 10px',borderRadius:8,border:'1px solid #E0D9CF',resize:'none',fontFamily:'inherit',lineHeight:1.6}} />
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9}}>
-            <select value={form.assignee} onChange={e=>setForm(f=>({...f,assignee:e.target.value}))} style={{fontSize:12,padding:'6px 8px',borderRadius:8,border:'1px solid #E0D9CF',background:'#FFF'}}>
-              <option value="apple">🍎 蘋果派</option>
-              <option value="pine">🌲 松果</option>
-              <option value="us">🤝 我們</option>
-            </select>
-            <input type="date" value={form.dueDate} onChange={e=>setForm(f=>({...f,dueDate:e.target.value}))} style={{fontSize:12,padding:'6px 8px',borderRadius:8,border:'1px solid #E0D9CF',background:'#FFF'}} />
-          </div>
-          <select value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))} style={{fontSize:12,padding:'6px 8px',borderRadius:8,border:'1px solid #E0D9CF',background:'#FFF'}}>
-            <option value="todo">待開始</option>
-            <option value="doing">進行中</option>
-            <option value="done">已完成</option>
-          </select>
-        </div>
-        <div style={{display:'flex',gap:8,marginTop:14,justifyContent:'flex-end'}}>
-          <button onClick={onClose} style={{background:'none',border:'1.5px solid #E0D9CF',borderRadius:8,padding:'6px 12px',fontSize:12,color:'#7D7468',cursor:'pointer'}}>取消</button>
-          <button onClick={save} style={{background:'#2D4A3E',color:'#F8F6F1',border:'none',borderRadius:8,padding:'6px 14px',fontSize:12,cursor:'pointer'}}>儲存</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── Projects Page (Action Kanban) ── */
-function ProjectsPage({ demData, setDemData }) {
-  const [filterDomain,  setFilterDomain]  = useState('all');
-  const [filterOwner,   setFilterOwner]   = useState('all');
-  const [draggingId,    setDraggingId]    = useState(null);
-  const [dragOver,      setDragOver]      = useState(null);
-  const [editAction,    setEditAction]    = useState(null);
-  const [isMobile,      setIsMobile]      = useState(typeof window!=='undefined'&&window.innerWidth<640);
-  const [showAdd,       setShowAdd]       = useState(false);
-  const [newTitle,      setNewTitle]      = useState('');
-  const [newProjectId,  setNewProjectId]  = useState('');
-
-  useEffect(()=>{
-    const fn=()=>setIsMobile(window.innerWidth<640);
-    window.addEventListener('resize',fn);
-    return()=>window.removeEventListener('resize',fn);
-  },[]);
-
-  const allActions = useMemo(()=>flattenActions(demData),[demData]);
-  const filtered   = allActions.filter(a=>{
-    if (filterDomain!=='all'&&a.domainId!==filterDomain) return false;
-    if (filterOwner !=='all'&&(a.assignee||'us')!==filterOwner) return false;
-    return true;
-  });
-
-  const cols = {
-    todo:  filtered.filter(a=>(a.status||'todo')==='todo'),
-    doing: filtered.filter(a=>(a.status||'todo')==='doing'),
-    done:  filtered.filter(a=>(a.status||'todo')==='done'),
-  };
-
-  function changeStatus(action, status) {
-    updateActionInDem(setDemData, action.projectId, action.id, {
-      status,
-      completedAt: status==='done' ? todayKey() : null,
-    });
-  }
-
-  function handleDrop(status) {
-    if (!draggingId) return;
-    const act = allActions.find(a=>a.id===draggingId);
-    if (act) changeStatus(act, status);
-    setDraggingId(null); setDragOver(null);
-  }
-
-  function saveEditedAction(updated) {
-    updateActionInDem(setDemData, updated.projectId, updated.id, {
-      title: updated.title, desc: updated.desc,
-      assignee: updated.assignee, dueDate: updated.dueDate,
-      status: updated.status,
-      completedAt: updated.status==='done'?(updated.completedAt||todayKey()):null,
-    });
-  }
-
-  function deleteAction(action) {
-    if (!window.confirm('確定刪除這個行動嗎？')) return;
-    setDemData(d=>({
-      ...d,
-      actions:{...d.actions,[action.projectId]:(d.actions[action.projectId]||[]).filter(a=>a.id!==action.id)},
-    }));
-    setEditAction(null);
-  }
-
-  function addAction() {
-    if (!newTitle.trim()||!newProjectId) return;
-    const a = makeAction(newTitle.trim());
-    setDemData(d=>({...d,actions:{...d.actions,[newProjectId]:[...(d.actions[newProjectId]||[]),a]}}));
-    setNewTitle(''); setShowAdd(false);
-  }
-
-  // Flat project list for add dropdown
-  const allProjects = useMemo(()=>flattenProjects(demData),[demData]);
-
-  const colDef = [
-    { key:'todo',  label:'待開始', accent:'#A09688', borderTop:'2px solid rgba(160,150,136,.5)' },
-    { key:'doing', label:'進行中', accent:'#C07040', borderTop:'2px solid rgba(232,149,109,.6)' },
-    { key:'done',  label:'已完成', accent:'#2D4A3E', borderTop:'2px solid rgba(45,74,62,.5)'    },
-  ];
-
-  const FilterBar = ()=>(
-    <div style={{padding:'11px 14px',borderBottom:'1px solid #EDE8E0',flexShrink:0,display:'flex',alignItems:'center',gap:7,flexWrap:'wrap'}}>
-      <span style={{fontFamily:"'Noto Serif TC',serif",fontSize:15,fontWeight:400,color:'#2D2820',marginRight:4}}>行動看板</span>
-      <select value={filterDomain} onChange={e=>setFilterDomain(e.target.value)} style={{fontSize:11,padding:'3px 7px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF',cursor:'pointer'}}>
-        <option value="all">所有領域</option>
-        {demData.domains.map(d=><option key={d.id} value={d.id}>{d.title}</option>)}
-      </select>
-      <select value={filterOwner} onChange={e=>setFilterOwner(e.target.value)} style={{fontSize:11,padding:'3px 7px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF',cursor:'pointer'}}>
-        <option value="all">所有人</option>
-        <option value="apple">🍎 蘋果派</option>
-        <option value="pine">🌲 松果</option>
-        <option value="us">🤝 我們</option>
-      </select>
-      <span style={{marginLeft:'auto',fontSize:10,color:'#A09688'}}>{filtered.length} 個行動</span>
-      <button onClick={()=>setShowAdd(s=>!s)} style={{background:'#2D4A3E',color:'#F8F6F1',border:'none',borderRadius:7,padding:'4px 10px',fontSize:11,cursor:'pointer'}}>＋ 新增</button>
-    </div>
-  );
-
-  const AddRow = ()=> showAdd ? (
-    <div style={{padding:'9px 14px',borderBottom:'1px solid #EDE8E0',background:'rgba(45,74,62,.04)',flexShrink:0,display:'flex',gap:7,alignItems:'center',flexWrap:'wrap'}}>
-      <input value={newTitle} onChange={e=>setNewTitle(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addAction()} placeholder="行動名稱…" autoFocus
-        style={{fontSize:12,padding:'5px 9px',borderRadius:7,border:'1px solid #E0D9CF',flex:1,minWidth:100,fontFamily:'inherit'}} />
-      <select value={newProjectId} onChange={e=>setNewProjectId(e.target.value)} style={{fontSize:11,padding:'5px 7px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF'}}>
-        <option value="">選擇專案…</option>
-        {allProjects.map(p=><option key={p.id} value={p.id}>{p.domainTitle} › {p.title}</option>)}
-      </select>
-      <button onClick={addAction} style={{background:'#2D4A3E',color:'#F8F6F1',border:'none',borderRadius:7,padding:'5px 11px',fontSize:11,cursor:'pointer'}}>建立</button>
-      <button onClick={()=>setShowAdd(false)} style={{background:'none',border:'1px solid #E0D9CF',borderRadius:7,padding:'5px 8px',fontSize:11,color:'#A09688',cursor:'pointer'}}>取消</button>
-    </div>
-  ) : null;
-
-  /* Mobile: list by status */
-  if (isMobile) {
-    return (
-      <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
-        <FilterBar />
-        <AddRow />
-        <div className="page-scroll" style={{flex:1}}>
-          <div style={{padding:'10px 12px 40px',display:'flex',flexDirection:'column',gap:5}}>
-            {colDef.map(col=>(
-              <div key={col.key}>
-                <p style={{fontSize:10,color:col.accent,fontWeight:500,letterSpacing:'.06em',textTransform:'uppercase',padding:'6px 0 4px'}}>{col.label} · {cols[col.key].length}</p>
-                {cols[col.key].map(a=>(
-                  <div key={a.id} style={{marginBottom:5}}>
-                    <ActionCard action={a} onOpen={()=>setEditAction(a)} dragging={false} onDragStart={()=>{}} onDragEnd={()=>{}} />
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-        {editAction&&<ActionEditModal action={editAction} onSave={a=>{saveEditedAction(a);setEditAction(null);}} onClose={()=>setEditAction(null)} />}
-      </div>
-    );
-  }
-
-  /* Desktop: 3-column Kanban */
-  return (
-    <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
-      <FilterBar />
-      <AddRow />
-      <div style={{flex:1,display:'flex',overflow:'hidden'}}>
-        {colDef.map((col,ci)=>(
-          <div key={col.key}
-            onDragOver={e=>{e.preventDefault();setDragOver(col.key);}}
-            onDragLeave={()=>setDragOver(null)}
-            onDrop={()=>handleDrop(col.key)}
-            style={{
-              flex:1,display:'flex',flexDirection:'column',minWidth:0,
-              borderRight:ci<2?'1px solid #EDE8E0':'none',
-              background:dragOver===col.key?'rgba(45,74,62,.04)':'transparent',
-              transition:'background .15s',
-            }}
-          >
-            <div style={{padding:'10px 12px 8px',display:'flex',alignItems:'center',gap:5,flexShrink:0,borderBottom:col.borderTop}}>
-              <span style={{fontSize:11,fontWeight:500,color:col.accent,letterSpacing:'.04em'}}>{col.label}</span>
-              <span style={{fontSize:10,color:'#C0B8AE',background:'rgba(180,172,160,.16)',borderRadius:8,padding:'1px 6px'}}>{cols[col.key].length}</span>
-            </div>
-            <div style={{flex:1,overflowY:'auto',padding:'8px 9px',display:'flex',flexDirection:'column',gap:6}}>
-              {cols[col.key].map(a=>(
-                <ActionCard key={a.id} action={a} onOpen={()=>setEditAction(a)}
-                  dragging={draggingId===a.id}
-                  onDragStart={()=>setDraggingId(a.id)}
-                  onDragEnd={()=>{setDraggingId(null);setDragOver(null);}} />
-              ))}
-              {cols[col.key].length===0&&(
-                <div style={{textAlign:'center',padding:'28px 0',color:'#C0B8AE',fontSize:11}}>
-                  {col.key==='todo'?'暫無待開始行動':col.key==='doing'?'暫無進行中行動':'還沒有完成的行動'}
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-      {editAction&&(
-        <div onClick={()=>setEditAction(null)} style={{position:'fixed',inset:0,zIndex:100,background:'rgba(45,40,35,.22)',backdropFilter:'blur(6px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:'#FDFAF5',borderRadius:18,padding:'22px',width:'100%',maxWidth:380,animation:'dialogIn .2s both'}}>
-            <h3 style={{fontSize:14,fontWeight:500,color:'#2D2820',marginBottom:4}}>{editAction.title}</h3>
-            <p style={{fontSize:10,color:'#A09688',marginBottom:14}}>{editAction.domainTitle} › {editAction.projectTitle}</p>
-            <ActionEditModal action={editAction}
-              onSave={a=>{saveEditedAction(a);setEditAction(null);}}
-              onClose={()=>setEditAction(null)} />
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-
-/* ════════════════════════════════════════════════════════
-   MEMORY WALL (Completed)
-════════════════════════════════════════════════════════ */
-function MemoriesPage({ demData }) {
-  const completed = useMemo(()=>{
-    const r=[];
-    demData.domains.forEach(dom=>{
-      (demData.projects[dom.id]||[]).forEach(proj=>{
-        (demData.actions[proj.id]||[]).forEach(a=>{
-          if(a.status==='done') r.push({...a,domainTitle:dom.title,projectTitle:proj.title,domainImage:dom.image,projectImage:proj.image});
-        });
-      });
-    });
-    return r.sort((a,b)=>(b.completedAt||'').localeCompare(a.completedAt||''));
-  },[demData]);
-
-  const [imgFailed, setImgFailed] = useState({});
-
-  if(completed.length===0) return (
-    <div className="page-scroll" style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100%'}}>
-      <div style={{textAlign:'center',color:'#C0B8AE',padding:40}}>
-        <p style={{fontSize:32,marginBottom:10}}>📸</p>
-        <p style={{fontFamily:"'Noto Serif TC',serif",fontSize:15,marginBottom:8}}>回憶牆還是空的</p>
-        <p style={{fontSize:12}}>完成的行動項目會在這裡累積，永遠不消失</p>
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="page-scroll">
-      <div style={{padding:'24px 24px 40px',maxWidth:680,margin:'0 auto'}}>
-        <div style={{marginBottom:22}}>
-          <h2 style={{fontFamily:"'Noto Serif TC',serif",fontSize:19,fontWeight:400,color:'#2D2820',marginBottom:6}}>回憶牆 ✓</h2>
-          <p style={{fontSize:12,color:'#A09688',marginBottom:12}}>共完成 {completed.length} 件事 · 永遠留在這裡，讓努力被看見</p>
-          {/* Stats row */}
-          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:8}}>
-            {[
-              { label:'全部完成', value:completed.length, color:'#2D4A3E' },
-              { label:'本週完成', value:completed.filter(a=>{const w=new Date();w.setDate(w.getDate()-7);return a.completedAt&&a.completedAt>=w.toISOString().slice(0,10);}).length, color:'#5A8F7B' },
-              { label:'人生領域', value:[...new Set(completed.map(a=>a.domainTitle))].length, color:'#8B7BAF' },
-            ].map(s=>(
-              <div key={s.label} className="card" style={{padding:'10px 12px',textAlign:'center'}}>
-                <p style={{fontSize:18,fontWeight:600,color:s.color,fontFamily:"'Noto Serif TC',serif"}}>{s.value}</p>
-                <p style={{fontSize:10,color:'#A09688',marginTop:2}}>{s.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div style={{columns:2,gap:12}}>
-          {completed.map(a=>{
-            const asn=PEOPLE[a.assignee]||PEOPLE.us;
-            const img = a.image || a.projectImage || a.domainImage;
-            const failed = imgFailed[a.id];
-            return (
-              <div key={a.id} className="card" style={{marginBottom:12,breakInside:'avoid',overflow:'hidden'}}>
-                {img&&!failed&&(
-                  <div style={{height:100,overflow:'hidden'}}>
-                    <img src={img} alt="" style={{width:'100%',height:'100%',objectFit:'cover'}} onError={()=>setImgFailed(prev=>({...prev,[a.id]:true}))} />
-                  </div>
-                )}
-                <div style={{padding:'11px 13px'}}>
-                  <p style={{fontSize:12,fontWeight:500,color:'#2D2820',marginBottom:3}}>{a.title}</p>
-                  <p style={{fontSize:10,color:'#A09688',marginBottom:6}}>{a.domainTitle} › {a.projectTitle}</p>
-                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                    <span style={{display:'flex',alignItems:'center',gap:4,fontSize:10,color:'#A09688'}}><span style={{width:5,height:5,borderRadius:'50%',background:asn.color,display:'inline-block'}}></span>{asn.name}</span>
-                    {a.completedAt&&<span style={{fontSize:10,color:'#C0B8AE'}}>{a.completedAt}</span>}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════════════════
-   REVIEW PAGE (Timeline)
-════════════════════════════════════════════════════════ */
-function ReviewPage({ demData, calEvents }) {
-  const items = useMemo(()=>{
-    const r=[];
-    demData.domains.forEach(dom=>{
-      (demData.projects[dom.id]||[]).forEach(proj=>{
-        (demData.actions[proj.id]||[]).forEach(a=>{
-          if(a.status==='done') r.push({...a,domainTitle:dom.title,projectTitle:proj.title,type:'action',date:a.completedAt||''});
-        });
-      });
-    });
-    calEvents.forEach(e=>r.push({...e,type:'event'}));
-    return r;
-  },[demData,calEvents]);
-
-  const byMonth = useMemo(()=>{
-    const map={};
-    items.forEach(item=>{ if(!item.date) return; const k=item.date.slice(0,7); if(!map[k]) map[k]=[]; map[k].push(item); });
-    return Object.entries(map).sort((a,b)=>b[0].localeCompare(a[0]));
-  },[items]);
-
-  if(byMonth.length===0) return (
-    <div className="page-scroll" style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100%'}}>
-      <div style={{textAlign:'center',color:'#C0B8AE',padding:40}}>
-        <p style={{fontSize:32,marginBottom:10}}>📖</p>
-        <p style={{fontFamily:"'Noto Serif TC',serif",fontSize:15,marginBottom:8}}>人生時間軸還是空的</p>
-        <p style={{fontSize:12}}>完成的事項和月曆事件，會在這裡形成你們的共同故事</p>
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="page-scroll">
-      <div style={{padding:'24px 24px 40px',maxWidth:640,margin:'0 auto'}}>
-        <h2 style={{fontFamily:"'Noto Serif TC',serif",fontSize:19,fontWeight:400,color:'#2D2820',marginBottom:24}}>生活回顧</h2>
-        {byMonth.map(([mk,mitems])=>{
-          const [y,m]=mk.split('-');
-          return (
-            <div key={mk} style={{marginBottom:28}}>
-              <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:12}}>
-                <div style={{width:36,height:36,borderRadius:'50%',background:'#2D4A3E',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                  <span style={{fontSize:10,color:'#F8F6F1',fontFamily:"'Noto Serif TC',serif"}}>{parseInt(m)}</span>
-                </div>
-                <p style={{fontFamily:"'Noto Serif TC',serif",fontSize:15,color:'#2D2820'}}>{y} 年 {MONTHS[parseInt(m)-1]}</p>
-              </div>
-              <div style={{marginLeft:18,borderLeft:'1px dashed #D8D0C4',paddingLeft:24,display:'flex',flexDirection:'column',gap:7}}>
-                {mitems.map((item,i)=>{
-                  if(item.type==='action') return (
-                    <div key={item.id+i} style={{position:'relative'}}>
-                      <div style={{position:'absolute',left:-28,top:8,width:7,height:7,borderRadius:'50%',background:'#2D4A3E',border:'2px solid #F8F6F1',boxShadow:'0 0 0 1px #2D4A3E'}}></div>
-                      <div className="card" style={{padding:'10px 13px'}}>
-                        <p style={{fontSize:13,fontWeight:500,color:'#2D2820'}}>✓ {item.title}</p>
-                        <p style={{fontSize:11,color:'#A09688',marginTop:2}}>{item.domainTitle} › {item.projectTitle}</p>
-                      </div>
-                    </div>
-                  );
-                  const owner=PEOPLE[item.owner]||PEOPLE.us;
-                  return (
-                    <div key={item.id+i} style={{position:'relative'}}>
-                      <div style={{position:'absolute',left:-28,top:8,width:7,height:7,borderRadius:'50%',background:owner.color,border:'2px solid #F8F6F1',boxShadow:`0 0 0 1px ${owner.color}`}}></div>
-                      <div className="card" style={{padding:'10px 13px'}}>
-                        <p style={{fontSize:13,fontWeight:500,color:'#2D2820'}}>📅 {item.title}</p>
-                        <p style={{fontSize:11,color:'#A09688',marginTop:2}}>{item.date} · {owner.name}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════════════════
-   SETUP SCREEN
-════════════════════════════════════════════════════════ */
-function SetupScreen() {
-  return (
-    <div style={{minHeight:'100vh',background:'#F8F6F1',display:'flex',alignItems:'center',justifyContent:'center',padding:24,fontFamily:"'Noto Sans TC',sans-serif"}}>
-      <div style={{maxWidth:380,width:'100%'}}>
-        <div style={{width:48,height:48,borderRadius:14,background:'#2D4A3E',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:16,margin:'0 auto 16px'}}>
-          <span style={{fontSize:22,color:'#F8F6F1'}}>✦</span>
-        </div>
-        <h1 style={{fontFamily:"'Noto Serif TC',serif",fontSize:20,fontWeight:400,color:'#2D2820',textAlign:'center',marginBottom:8}}>需要先設定連線</h1>
-        <p style={{fontSize:13,color:'#A09688',textAlign:'center',marginBottom:20}}>請將 Google Apps Script 網址貼入 <code style={{background:'#EDE8E0',padding:'1px 5px',borderRadius:5,fontSize:12}}>APPS_SCRIPT_URL</code></p>
-        <div style={{background:'rgba(255,255,255,.8)',border:'1px solid rgba(180,172,160,.4)',borderRadius:16,padding:'20px',fontSize:13,color:'#3D3830'}}>
-          <p style={{fontWeight:500,marginBottom:12}}>設定步驟</p>
-          <ol style={{paddingLeft:18,display:'flex',flexDirection:'column',gap:8,color:'#7D7468'}}>
-            <li>建立 Google Sheets 與 Google Drive 資料夾</li>
-            <li>到 <a href="https://script.google.com" target="_blank" style={{color:'#2D4A3E'}}>script.google.com</a> 建立 Apps Script</li>
-            <li>貼入 <code style={{background:'#EDE8E0',padding:'1px 4px',borderRadius:4,fontSize:11}}>Code.gs</code>，填入 SHEET_ID 和 FOLDER_ID</li>
-            <li>部署為「網路應用程式」，存取選「所有人」</li>
-            <li>複製 Web App 網址</li>
-            <li>用文字編輯器打開 <code style={{background:'#EDE8E0',padding:'1px 4px',borderRadius:4,fontSize:11}}>platform.html</code>，貼入網址</li>
-          </ol>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════════════════
-   APP
-════════════════════════════════════════════════════════ */
-function App() {
-  const [page, setPage] = useState('home');
-  const [dreamJump, setDreamJump] = useState(null);
-
-  function onJumpDomain(domainId, domainTitle) {
-    setDreamJump({ domainId, domainTitle, ts: Date.now() }); // ts forces useEffect to fire even if same domain
-    setPage('dream');
-  }
-
-  const [state, setState] = useState(() => {
-    const saved = lsLoad();
-    return saved || buildDefaultState();
-  });
-
-  const [loading, setLoading]   = useState(IS_CONFIGURED);
-  const [loadErr, setLoadErr]   = useState('');
-  const [syncing, setSyncing]   = useState(false);
-  const saveTimerRef = useRef(null);
-
-  // Load from Sheets on mount
-  useEffect(() => {
-    if (!IS_CONFIGURED) return;
-    fetchFromSheets();
-  }, []);
-
-  async function fetchFromSheets() {
-    setSyncing(true);
-    try {
-      const data = await sheetsLoadAll();
-      setState(prev => {
-        const next = { ...prev };
-        if (data.demData)     next.demData     = data.demData;
-        if (data.calEvents)   next.calEvents   = data.calEvents;
-        if (data.todayStatus) next.todayStatus = data.todayStatus;
-        if (data.support)     next.support     = data.support;
-        lsSave(next);
-        return next;
-      });
-      setLoadErr('');
-    } catch(err) {
-      setLoadErr('同步失敗：' + err.message);
-    } finally {
-      setSyncing(false); setLoading(false);
-    }
-  }
-
-  // Auto-save: localStorage immediately, Sheets debounced 3s
-  useEffect(() => {
-    lsSave(state);
-    if (!IS_CONFIGURED) return;
-    clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      sheetsSave('demData',     state.demData).catch(()=>{});
-      sheetsSave('calEvents',   state.calEvents).catch(()=>{});
-      sheetsSave('todayStatus', state.todayStatus).catch(()=>{});
-      sheetsSave('support',     state.support).catch(()=>{});
-    }, 3000);
-    return () => clearTimeout(saveTimerRef.current);
-  }, [state]);
-
-  function setDemData(updater) {
-    setState(s => ({ ...s, demData: typeof updater==='function' ? updater(s.demData) : updater }));
-  }
-  function setCalEvents(updater) {
-    setState(s => ({ ...s, calEvents: typeof updater==='function' ? updater(s.calEvents) : updater }));
-  }
-  function setTodayStatus(person, field, value) {
-    setState(s => ({ ...s, todayStatus: { ...s.todayStatus, [person]: { ...s.todayStatus[person], [field]: value } } }));
-  }
-  function handleSupportChange(nodeId, newSup) {
-    setState(s => ({ ...s, support: { ...s.support, [nodeId]: newSup } }));
-  }
-
-  if (!IS_CONFIGURED) return <SetupScreen />;
-  if (loading) return (
-    <div style={{minHeight:'100vh',background:'#F8F6F1',display:'flex',alignItems:'center',justifyContent:'center',fontFamily:"'Noto Sans TC',sans-serif"}}>
-      <div style={{textAlign:'center'}}>
-        <div style={{width:40,height:40,borderRadius:12,background:'#2D4A3E',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 10px'}}>
-          <span style={{fontSize:18,color:'#F8F6F1'}}>✦</span>
-        </div>
-        <p style={{fontSize:13,color:'#A09688'}}>讀取共同資料中…</p>
-        {loadErr && <p style={{fontSize:12,color:'#C0887A',marginTop:6}}>{loadErr}</p>}
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="platform">
-      {/* Sidebar */}
-      <nav className="sidebar">
-        <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3,marginBottom:8}}>
-          <div className="sidebar-brand" title="共同生活平台">✦</div>
-          <span style={{fontSize:9,color:'rgba(248,246,241,.55)',letterSpacing:'.04em',lineHeight:1.4,textAlign:'center'}}>🍎🌲<br/>🤝</span>
-        </div>
-        {PAGES.map(p => (
-          <button key={p.key} onClick={() => setPage(p.key)} className={`nav-btn${page===p.key?' active':''}`} title={p.label}>
-            <span className="nav-icon">{p.icon}</span>
-            <span className="nav-label">{p.label}</span>
-          </button>
-        ))}
-        <button onClick={fetchFromSheets} disabled={syncing} title="同步最新資料" className={`sync-btn${syncing?' spinning':''}`} style={{fontSize:15}}>↻</button>
       </nav>
 
       {/* Page content */}
       <div className="page-content">
-        {page==='home'     && <HomePage     demData={state.demData} calEvents={state.calEvents} todayStatus={state.todayStatus} setTodayStatus={setTodayStatus} setPage={setPage} onJumpDomain={onJumpDomain} />}
+        {page==='home'     && <HomePage     demData={state.demData} calEvents={state.calEvents} todayStatus={state.todayStatus} setTodayStatus={setTodayStatus} setPage={setPage} onJumpProject={onJumpProject} />}
         {page==='dream'    && <div style={{flex:1,display:'flex',overflow:'hidden'}}><DreamExpansionMap data={state.demData} setData={setDemData} support={state.support} onSupportChange={handleSupportChange} jumpTo={dreamJump} /></div>}
         {page==='calendar' && <CalendarPage calEvents={state.calEvents} setCalEvents={setCalEvents} />}
         {page==='projects' && <ProjectsPage demData={state.demData} setDemData={setDemData} />}
@@ -3789,7 +2200,39 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+class ErrorBoundary extends React.Component {
+  constructor(props){ super(props); this.state={error:null}; }
+  static getDerivedStateFromError(e){ return {error:e}; }
+  render(){
+    if(this.state.error){
+      return (
+        <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'#F8F6F1',fontFamily:"'Noto Sans TC',sans-serif",padding:32}}>
+          <div style={{maxWidth:480,textAlign:'center'}}>
+            <p style={{fontSize:32,marginBottom:12}}>⚠️</p>
+            <h2 style={{fontSize:16,fontWeight:500,color:'#2D2820',marginBottom:8}}>頁面載入發生錯誤</h2>
+            <p style={{fontSize:12,color:'#A09688',marginBottom:16,lineHeight:1.6}}>
+              可能是舊版資料格式需要重新整理。<br/>請嘗試清除瀏覽器快取或點擊下方按鈕重設。
+            </p>
+            <p style={{fontSize:11,color:'#C0B8AE',background:'#EDE8E0',borderRadius:8,padding:'8px 12px',textAlign:'left',wordBreak:'break-all',marginBottom:16}}>
+              {this.state.error.toString()}
+            </p>
+            <button onClick={async()=>{
+                try { if(IS_CONFIGURED) await clearSheetsData(); } catch(e){}
+                localStorage.clear();
+                window.location.reload();
+              }}
+              style={{background:'#2D4A3E',color:'#F8F6F1',border:'none',borderRadius:10,padding:'10px 24px',fontSize:13,cursor:'pointer'}}>
+              清除所有資料並重新載入
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<ErrorBoundary><App /></ErrorBoundary>);
 </script>
 </body>
 </html>
