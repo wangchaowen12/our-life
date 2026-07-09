@@ -84,6 +84,11 @@ const { useState, useEffect, useRef, useCallback, useMemo } = React;
 ════════════════════════════════════════════════════════ */
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwWF7d8VAbj1XhijdKRc8d8eLPwMhdikWxqw5Il4ocRJ_D27IFH5VPmTfjYODdvUXoj/exec';
 const IS_CONFIGURED = APPS_SCRIPT_URL !== 'YOUR_APPS_SCRIPT_URL_HERE';
+const IS_FILE_PROTOCOL = (typeof window!=='undefined') && window.location.protocol === 'file:';
+// LINE / Facebook / Instagram / WeChat's built-in browsers are separate WebView environments that
+// can restrict cross-origin requests or behave inconsistently with cloud sync — recommend opening
+// in the real system browser (Safari/Chrome) instead.
+const IN_APP_BROWSER = (typeof navigator!=='undefined') && /Line\/|FBAN|FBAV|Instagram|MicroMessenger/i.test(navigator.userAgent);
 
 /* ════════════════════════════════════════════════════════
    Google Sheets / Drive API
@@ -91,11 +96,14 @@ const IS_CONFIGURED = APPS_SCRIPT_URL !== 'YOUR_APPS_SCRIPT_URL_HERE';
 async function apiGet(params) {
   const url = new URL(APPS_SCRIPT_URL);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  const res = await fetch(url.toString(), { redirect: 'follow' });
+  // Cache-bust: some embedded browsers (e.g. LINE/FB in-app WebViews) aggressively cache GET
+  // responses even for dynamic data. A unique query param + no-store guarantees a fresh network hit.
+  url.searchParams.set('_ts', Date.now().toString());
+  const res = await fetch(url.toString(), { redirect: 'follow', cache: 'no-store' });
   return JSON.parse(await res.text());
 }
 async function apiPost(body) {
-  const res = await fetch(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(body), redirect: 'follow' });
+  const res = await fetch(APPS_SCRIPT_URL, { method: 'POST', body: JSON.stringify(body), redirect: 'follow', cache: 'no-store' });
   return JSON.parse(await res.text());
 }
 async function sheetsLoadAll() {
@@ -537,6 +545,21 @@ function EditDialog({ node, layer, onSave, onDelete, onClose, support, onSupport
 function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reorderable, onOwnerChange, dragIndex, onDragStartNode, onDragOverNode, onDropNode, isDragOver, isDragging }) {
   const [hovered, setHovered] = useState(false);
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false);
+  const pickerRef = useRef(null);
+
+  // Close the owner picker when clicking anywhere outside it
+  useEffect(() => {
+    if (!ownerPickerOpen) return;
+    function handleOutside(e) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target)) setOwnerPickerOpen(false);
+    }
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+    };
+  }, [ownerPickerOpen]);
 
   const OC = {
     apple:{ border:'rgba(232,149,109,.55)', bg:'rgba(232,149,109,.09)', accent:'#E8956D', glow:'rgba(232,149,109,.22)' },
@@ -666,10 +689,10 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reordera
 
         {/* Owner picker popover */}
         {ownerPickerOpen && (
-          <div onClick={e=>e.stopPropagation()}
+          <div ref={pickerRef} onClick={e=>e.stopPropagation()}
             style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',
               background:'#FDFAF5',border:'1px solid #E0D9CF',borderRadius:12,padding:'6px',
-              boxShadow:'0 8px 24px rgba(45,40,35,.2)',zIndex:10,display:'flex',flexDirection:'column',gap:2,minWidth:104}}>
+              boxShadow:'0 8px 24px rgba(45,40,35,.25)',zIndex:999,display:'flex',flexDirection:'column',gap:2,minWidth:104}}>
             {[{k:'apple',e:'🍎',l:'蘋果派'},{k:'pine',e:'🌲',l:'松果'},{k:'us',e:'💜',l:'我們'}].map(o=>(
               <button key={o.k} onClick={()=>{onOwnerChange(o.k);setOwnerPickerOpen(false);}}
                 style={{display:'flex',alignItems:'center',gap:6,background:nodeOwner===o.k?'rgba(45,74,62,.08)':'none',
@@ -788,9 +811,20 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
     setDragIdx(null); setDragOverIdx(null);
   }
 
-  // ── Change owner directly from the map (Life Domains + Projects level) ──
+  // ── Change owner directly from the map (Life Domains / Projects level) ──
   const changeProjectOwner = useCallback((projectId, newOwner) => {
     setData(d => ({ ...d, projects: (d.projects||[]).map(p => p.id===projectId ? {...p, owner:newOwner} : p) }));
+  },[setData]);
+
+  // ── Change owner (assignee) directly from the map at the Action level ──
+  const changeActionOwner = useCallback((parentProjectId, actionId, newOwner) => {
+    setData(d => ({
+      ...d,
+      actions: {
+        ...d.actions,
+        [parentProjectId]: (d.actions[parentProjectId]||[]).map(a => a.id===actionId ? {...a, assignee:newOwner} : a),
+      },
+    }));
   },[setData]);
 
   const currentLayer = current.depth===0?'projects':'actions';
@@ -843,7 +877,7 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
             reorderable={current.depth===0} dragIndex={i}
             onDragStartNode={setDragIdx} onDragOverNode={setDragOverIdx} onDropNode={handleDropNode}
             isDragOver={dragOverIdx===i && dragIdx!==i} isDragging={dragIdx===i}
-            onOwnerChange={current.depth===0 && node ? (o)=>changeProjectOwner(node.id,o) : undefined}
+            onOwnerChange={node ? (current.depth===0 ? (o)=>changeProjectOwner(node.id,o) : (o)=>changeActionOwner(current.id,node.id,o)) : undefined}
           />);})}
         </div>
       </div>
@@ -2384,6 +2418,7 @@ function App() {
   const [loading, setLoading]   = useState(IS_CONFIGURED);
   const [loadErr, setLoadErr]   = useState('');
   const [syncing, setSyncing]   = useState(false);
+  const [syncError, setSyncError] = useState('');
   const saveTimerRef = useRef(null);
 
   // Load from Sheets on mount
@@ -2419,24 +2454,63 @@ function App() {
     }
   }
 
-  // Auto-save: localStorage immediately, Firebase/Sheets debounced ~1.2s — no manual save button needed
+  // Auto-save: localStorage immediately, Sheets debounced ~1.2s — no manual save button needed
+  const lastEditAtRef = useRef(0);
   useEffect(() => {
     lsSave(state);
+    lastEditAtRef.current = Date.now();
     if (!IS_CONFIGURED) return;
     clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(async () => {
-      setSyncing(true);
-      try {
-        await Promise.all([
-          sheetsSave('demData',     state.demData),
-          sheetsSave('calEvents',   state.calEvents),
-          sheetsSave('todayStatus', state.todayStatus),
-          sheetsSave('support',     state.support),
-        ]);
-      } catch(e) {} finally { setSyncing(false); }
-    }, 1200);
+    saveTimerRef.current = setTimeout(() => flushSaveNow(), 1200);
     return () => clearTimeout(saveTimerRef.current);
   }, [state]);
+
+  const stateRef = useRef(state);
+  useEffect(() => { stateRef.current = state; }, [state]);
+
+  function flushSaveNow() {
+    clearTimeout(saveTimerRef.current);
+    if (!IS_CONFIGURED) return;
+    setSyncing(true);
+    const s = stateRef.current;
+    Promise.all([
+      sheetsSave('demData',     s.demData),
+      sheetsSave('calEvents',   s.calEvents),
+      sheetsSave('todayStatus', s.todayStatus),
+      sheetsSave('support',     s.support),
+    ]).then(()=>setSyncError('')).catch((e)=>{
+      console.error('雲端同步失敗:', e);
+      setSyncError(IS_FILE_PROTOCOL
+        ? '本機檔案無法連上雲端，請改用網址開啟'
+        : (e && e.message ? e.message : '同步失敗，請檢查網路連線'));
+    }).finally(()=>setSyncing(false));
+  }
+
+  // Cross-device sync fixes:
+  // 1. When this tab/app comes back into view, pull the latest data — otherwise a tab left open
+  //    all day would keep showing stale info even though another device (e.g. phone) saved changes.
+  // 2. When this tab/app is about to go into the background (switching apps on mobile, closing the
+  //    tab, locking the phone), flush any pending save immediately instead of waiting for the debounce —
+  //    otherwise an edit made right before switching away could be lost before it reaches the cloud.
+  useEffect(() => {
+    if (!IS_CONFIGURED) return;
+    function handleVisibility() {
+      if (document.hidden) {
+        flushSaveNow();
+      } else if (Date.now() - lastEditAtRef.current > 4000) {
+        // Only auto-refresh if we haven't just been actively editing, to avoid clobbering in-progress typing
+        fetchFromSheets();
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('pagehide', flushSaveNow);
+    window.addEventListener('focus', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('pagehide', flushSaveNow);
+      window.removeEventListener('focus', handleVisibility);
+    };
+  }, []);
 
   function setDemData(updater) {
     setState(s => ({ ...s, demData: typeof updater==='function' ? updater(s.demData) : updater }));
@@ -2479,10 +2553,26 @@ function App() {
           </button>
         ))}
         {/* Passive auto-save status — not a button, no manual action needed */}
-        <div title={syncing?'同步中…':'已自動儲存'} style={{marginTop:'auto',width:36,height:36,borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',color:'rgba(248,246,241,.4)',fontSize:13}}>
-          {syncing ? <span style={{animation:'spin .8s linear infinite',display:'inline-block'}}>↻</span> : '✓'}
+        <div title={syncError ? `⚠ ${syncError}` : (syncing?'同步中…':'已自動儲存')}
+          style={{marginTop:'auto',width:36,height:36,borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',
+            color: syncError ? '#E8956D' : 'rgba(248,246,241,.4)', fontSize:13}}>
+          {syncError ? '⚠' : (syncing ? <span style={{animation:'spin .8s linear infinite',display:'inline-block'}}>↻</span> : '✓')}
         </div>
       </nav>
+
+      {/* Structural warning: opening the file directly (file://) instead of via a hosted https:// URL
+          means fetch() calls to the cloud backend are blocked by the browser — nothing will ever sync
+          across devices until it's hosted somewhere and opened via that URL on every device. */}
+      {IS_FILE_PROTOCOL && (
+        <div style={{position:'fixed',top:0,left:0,right:0,zIndex:200,background:'#C0887A',color:'#FDFAF5',fontSize:12,textAlign:'center',padding:'7px 12px'}}>
+          ⚠ 你正在用「本機檔案」開啟這個頁面，手機與電腦之間無法同步資料。請把這個檔案放到一個網址（例如 GitHub Pages、Netlify）上，並在所有裝置都用同一個網址開啟。
+        </div>
+      )}
+      {!IS_FILE_PROTOCOL && IN_APP_BROWSER && (
+        <div style={{position:'fixed',top:0,left:0,right:0,zIndex:200,background:'#C0887A',color:'#FDFAF5',fontSize:12,textAlign:'center',padding:'7px 12px'}}>
+          ⚠ 偵測到你是用 LINE／FB／IG 內建瀏覽器打開的，這類瀏覽器有時會擋掉雲端同步。建議點右上角「⋯」選單改用「在瀏覽器中開啟」（Safari／Chrome）。
+        </div>
+      )}
 
       {/* Page content */}
       <div className="page-content">
