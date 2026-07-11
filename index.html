@@ -2698,29 +2698,24 @@ function App() {
             <span className="nav-label">{p.label}</span>
           </button>
         ))}
-        {/* Passive auto-save status — not a button, no manual action needed */}
-        <div title={!initialSyncDone ? '正在確認雲端最新資料，暫不寫入…' : (syncError ? `⚠ ${syncError}` : (syncing?'同步中…':'已自動儲存'))}
+        {/* Passive auto-save status — not a button, no manual action needed.
+            Also quietly folds in the file:// / in-app-browser hints instead of a page-wide banner. */}
+        <div title={
+            IS_FILE_PROTOCOL ? '⚠ 本機檔案無法同步，請改用網址開啟'
+            : IN_APP_BROWSER ? '⚠ LINE／FB／IG 內建瀏覽器可能擋掉同步，建議點「⋯」在瀏覽器中開啟'
+            : !initialSyncDone ? '正在確認雲端最新資料，暫不寫入…'
+            : syncError ? `⚠ ${syncError}`
+            : (syncing?'同步中…':'已自動儲存')
+          }
           style={{marginTop:'auto',width:36,height:36,borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',
-            color: !initialSyncDone ? 'rgba(248,246,241,.5)' : (syncError ? '#E8956D' : 'rgba(248,246,241,.4)'), fontSize:13}}>
-          {!initialSyncDone
-            ? <span style={{animation:'spin .8s linear infinite',display:'inline-block'}}>⏳</span>
-            : (syncError ? '⚠' : (syncing ? <span style={{animation:'spin .8s linear infinite',display:'inline-block'}}>↻</span> : '✓'))}
+            color: (IS_FILE_PROTOCOL||IN_APP_BROWSER||syncError) ? '#E8956D' : (!initialSyncDone ? 'rgba(248,246,241,.5)' : 'rgba(248,246,241,.4)'), fontSize:13}}>
+          {IS_FILE_PROTOCOL || IN_APP_BROWSER || syncError
+            ? '⚠'
+            : (!initialSyncDone
+                ? <span style={{animation:'spin .8s linear infinite',display:'inline-block'}}>⏳</span>
+                : (syncing ? <span style={{animation:'spin .8s linear infinite',display:'inline-block'}}>↻</span> : '✓'))}
         </div>
       </nav>
-
-      {/* Structural warning: opening the file directly (file://) instead of via a hosted https:// URL
-          means fetch() calls to the cloud backend are blocked by the browser — nothing will ever sync
-          across devices until it's hosted somewhere and opened via that URL on every device. */}
-      {IS_FILE_PROTOCOL && (
-        <div style={{position:'fixed',top:0,left:0,right:0,zIndex:200,background:'#C0887A',color:'#FDFAF5',fontSize:12,textAlign:'center',padding:'7px 12px'}}>
-          ⚠ 你正在用「本機檔案」開啟這個頁面，手機與電腦之間無法同步資料。請把這個檔案放到一個網址（例如 GitHub Pages、Netlify）上，並在所有裝置都用同一個網址開啟。
-        </div>
-      )}
-      {!IS_FILE_PROTOCOL && IN_APP_BROWSER && (
-        <div style={{position:'fixed',top:0,left:0,right:0,zIndex:200,background:'#C0887A',color:'#FDFAF5',fontSize:12,textAlign:'center',padding:'7px 12px'}}>
-          ⚠ 偵測到你是用 LINE／FB／IG 內建瀏覽器打開的，這類瀏覽器有時會擋掉雲端同步。建議點右上角「⋯」選單改用「在瀏覽器中開啟」（Safari／Chrome）。
-        </div>
-      )}
 
       {/* Sync toast — a brief, dismissible heads-up whenever we're about to pull from or push to the
           cloud, so it's never a silent surprise. Auto-hides shortly after; doesn't block interaction. */}
