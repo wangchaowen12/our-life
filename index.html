@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
@@ -2422,6 +2421,16 @@ function App() {
   const [syncError, setSyncError] = useState('');
   const saveTimerRef = useRef(null);
 
+  // ── CRITICAL: prevent stale-local-data from overwriting fresher cloud data ──
+  // On mount, the app shows locally-cached data immediately (so it isn't blank while loading),
+  // then fetches the real cloud data in the background. If we let the auto-save debounce fire
+  // BEFORE that first cloud fetch completes, a phone with an older local cache could push its
+  // stale snapshot to the cloud and clobber changes made from another device. So: no writes to
+  // the cloud are allowed until the first pull has succeeded at least once this session.
+  const initialSyncDoneRef = useRef(!IS_CONFIGURED);
+  const [initialSyncDone, setInitialSyncDone] = useState(!IS_CONFIGURED);
+  const retryCountRef = useRef(0);
+
   // Load from Sheets on mount
   useEffect(() => {
     if (!IS_CONFIGURED) return;
@@ -2448,8 +2457,25 @@ function App() {
         }
       });
       setLoadErr('');
+      setSyncError('');
+      retryCountRef.current = 0;
+      initialSyncDoneRef.current = true;
+      setInitialSyncDone(true);
     } catch(err) {
       setLoadErr('同步失敗：' + err.message);
+      if (!initialSyncDoneRef.current) {
+        // Haven't successfully pulled cloud data yet this session — keep local writes blocked and
+        // retry the pull automatically, so we never push an unverified local snapshot to the cloud.
+        retryCountRef.current += 1;
+        if (retryCountRef.current <= 8) {
+          setTimeout(fetchFromSheets, 5000);
+        } else {
+          // Given up retrying (likely genuinely offline) — allow local edits to queue up and sync
+          // once connectivity returns, rather than blocking the user from saving forever.
+          initialSyncDoneRef.current = true;
+          setInitialSyncDone(true);
+        }
+      }
     } finally {
       setSyncing(false); setLoading(false);
     }
@@ -2460,18 +2486,18 @@ function App() {
   useEffect(() => {
     lsSave(state);
     lastEditAtRef.current = Date.now();
-    if (!IS_CONFIGURED) return;
+    if (!IS_CONFIGURED || !initialSyncDoneRef.current) return; // don't push to cloud until we've pulled first
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => flushSaveNow(), 1200);
     return () => clearTimeout(saveTimerRef.current);
-  }, [state]);
+  }, [state, initialSyncDone]);
 
   const stateRef = useRef(state);
   useEffect(() => { stateRef.current = state; }, [state]);
 
   function flushSaveNow() {
     clearTimeout(saveTimerRef.current);
-    if (!IS_CONFIGURED) return;
+    if (!IS_CONFIGURED || !initialSyncDoneRef.current) return; // still waiting on the first cloud pull
     setSyncing(true);
     const s = stateRef.current;
     Promise.all([
@@ -2554,10 +2580,12 @@ function App() {
           </button>
         ))}
         {/* Passive auto-save status — not a button, no manual action needed */}
-        <div title={syncError ? `⚠ ${syncError}` : (syncing?'同步中…':'已自動儲存')}
+        <div title={!initialSyncDone ? '正在確認雲端最新資料，暫不寫入…' : (syncError ? `⚠ ${syncError}` : (syncing?'同步中…':'已自動儲存'))}
           style={{marginTop:'auto',width:36,height:36,borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',
-            color: syncError ? '#E8956D' : 'rgba(248,246,241,.4)', fontSize:13}}>
-          {syncError ? '⚠' : (syncing ? <span style={{animation:'spin .8s linear infinite',display:'inline-block'}}>↻</span> : '✓')}
+            color: !initialSyncDone ? 'rgba(248,246,241,.5)' : (syncError ? '#E8956D' : 'rgba(248,246,241,.4)'), fontSize:13}}>
+          {!initialSyncDone
+            ? <span style={{animation:'spin .8s linear infinite',display:'inline-block'}}>⏳</span>
+            : (syncError ? '⚠' : (syncing ? <span style={{animation:'spin .8s linear infinite',display:'inline-block'}}>↻</span> : '✓'))}
         </div>
       </nav>
 
