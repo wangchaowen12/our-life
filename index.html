@@ -184,11 +184,11 @@ function lsSave(s) { try { localStorage.setItem(LS_KEY, JSON.stringify(s)); } ca
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
 function makeNode(title, desc='') {
-  return { id:uid(), title, desc, image:null, updates:[] };
+  return { id:uid(), title, desc, image:null, updates:[], _updatedAt: Date.now() };
 }
 function makeAction(title) {
   return { id:uid(), title, desc:'', image:null, updates:[], status:'todo', assignee:'us', dueDate:null, completedAt:null,
-    recurType:'once', recurFreq:'weekly', recurCustomDays:7 };
+    recurType:'once', recurFreq:'weekly', recurCustomDays:7, _updatedAt: Date.now() };
 }
 /* ── Recurring Action helpers ──
    recurType: 'once' | 'recurring'
@@ -211,6 +211,7 @@ function spawnNextRecurrence(action) {
     status: 'todo',
     completedAt: null,
     dueDate: nextRecurDate(todayKey(), action.recurFreq, action.recurCustomDays),
+    _updatedAt: Date.now(),
   };
 }
 
@@ -244,6 +245,72 @@ function buildDefault() {
 
 function buildDefaultState() {
   return { demData:buildDefault(), calEvents:[], todayStatus:{ apple:{stress:'normal',note:''}, pine:{stress:'normal',note:''} }, support:{} };
+}
+
+/* ════════════════════════════════════════════════════════
+   MERGE-ON-SYNC — reconciling edits made on two different devices
+   ────────────────────────────────────────────────────────
+   Google Sheets isn't a real-time database, so instead of one device's save blindly
+   overwriting whatever the other device wrote, we fetch the latest cloud copy right
+   before writing and merge item-by-item (matched by id), keeping whichever version of
+   each item has the newer _updatedAt timestamp, and unioning items that only exist on
+   one side. This means two people editing DIFFERENT items on separate devices both
+   keep their work, instead of whoever hits save second wiping out the other's changes.
+   Known limitation: deleting an item on one device can be "revived" by a merge if the
+   other device's stale copy still has it — we accept that trade-off since losing an
+   edit silently is worse than an occasional item reappearing. ──────────────────────*/
+function mergeById(cloudList, localList) {
+  const cloudArr = Array.isArray(cloudList) ? cloudList : [];
+  const localArr = Array.isArray(localList) ? localList : [];
+  const map = new Map();
+  cloudArr.forEach(item => { if (item && item.id) map.set(item.id, item); });
+  localArr.forEach(item => {
+    if (!item || !item.id) return;
+    const existing = map.get(item.id);
+    if (!existing) { map.set(item.id, item); return; }
+    const localT = item._updatedAt || 0, cloudT = existing._updatedAt || 0;
+    map.set(item.id, localT >= cloudT ? item : existing);
+  });
+  return Array.from(map.values());
+}
+function mergeStringArray(cloudArr, localArr) {
+  const seen = new Set();
+  const out = [];
+  [...(cloudArr||[]), ...(localArr||[])].forEach(s => { if (s && !seen.has(s)) { seen.add(s); out.push(s); } });
+  return out;
+}
+function mergeUpdatesArray(cloudArr, localArr) {
+  const key = u => `${u && u.date}::${u && u.text}`;
+  const map = new Map();
+  [...(cloudArr||[]), ...(localArr||[])].forEach(u => { if (u) map.set(key(u), u); });
+  return Array.from(map.values()).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+}
+function mergeDemData(cloudDem, localDem) {
+  const cloud = cloudDem || {};
+  const local = localDem || buildDefault();
+  const projects = mergeById(cloud.projects, local.projects);
+  const pids = new Set([...Object.keys(cloud.actions||{}), ...Object.keys(local.actions||{})]);
+  const actions = {};
+  pids.forEach(pid => { actions[pid] = mergeById((cloud.actions||{})[pid], (local.actions||{})[pid]); });
+  return { dream: local.dream || cloud.dream || makeNode('共創理想生活'), projects, actions };
+}
+function mergeCalEventsData(cloudEv, localEv) {
+  return mergeById(cloudEv, localEv);
+}
+function mergeTodayStatus(cloudTS, localTS) {
+  return { ...(cloudTS||{}), ...(localTS||{}) };
+}
+function mergeSupport(cloudSup, localSup) {
+  const cloud = cloudSup || {};
+  const local = localSup || {};
+  const ids = new Set([...Object.keys(cloud), ...Object.keys(local)]);
+  const merged = {};
+  ids.forEach(id => {
+    const c = cloud[id] || { needed:[], received:[] };
+    const l = local[id] || { needed:[], received:[] };
+    merged[id] = { needed: mergeStringArray(c.needed, l.needed), received: mergeStringArray(c.received, l.received) };
+  });
+  return merged;
 }
 
 /* ════════════════════════════════════════════════════════
@@ -765,13 +832,14 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
   const zoomTo = useCallback((idx)=>{ if(idx===stack.length-1) return; navigate(stack.slice(0,idx+1)); },[stack,navigate]);
 
   const updateNode = useCallback((layer,parentId,updated)=>{
+    const stamped = { ...updated, _updatedAt: Date.now() };
     setData(d=>{
-      if(layer==='dream')    return{...d,dream:updated};
-      if(layer==='projects') return{...d,projects:(d.projects||[]).map(n=>n.id===updated.id?updated:n)};
-      if(layer==='actions')  return{...d,actions:{...d.actions,[parentId]:(d.actions[parentId]||[]).map(n=>n.id===updated.id?updated:n)}};
+      if(layer==='dream')    return{...d,dream:stamped};
+      if(layer==='projects') return{...d,projects:(d.projects||[]).map(n=>n.id===stamped.id?stamped:n)};
+      if(layer==='actions')  return{...d,actions:{...d.actions,[parentId]:(d.actions[parentId]||[]).map(n=>n.id===stamped.id?stamped:n)}};
       return d;
     });
-    setStack(s=>s.map(item=>item.id===updated.id?{...item,title:updated.title}:item));
+    setStack(s=>s.map(item=>item.id===stamped.id?{...item,title:stamped.title}:item));
   },[setData]);
 
   const deleteNode = useCallback((layer,parentId,id)=>{
@@ -813,7 +881,7 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
 
   // ── Change owner directly from the map (Life Domains / Projects level) ──
   const changeProjectOwner = useCallback((projectId, newOwner) => {
-    setData(d => ({ ...d, projects: (d.projects||[]).map(p => p.id===projectId ? {...p, owner:newOwner} : p) }));
+    setData(d => ({ ...d, projects: (d.projects||[]).map(p => p.id===projectId ? {...p, owner:newOwner, _updatedAt:Date.now()} : p) }));
   },[setData]);
 
   // ── Change owner (assignee) directly from the map at the Action level ──
@@ -822,7 +890,7 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
       ...d,
       actions: {
         ...d.actions,
-        [parentProjectId]: (d.actions[parentProjectId]||[]).map(a => a.id===actionId ? {...a, assignee:newOwner} : a),
+        [parentProjectId]: (d.actions[parentProjectId]||[]).map(a => a.id===actionId ? {...a, assignee:newOwner, _updatedAt:Date.now()} : a),
       },
     }));
   },[setData]);
@@ -1267,7 +1335,7 @@ function DayModal({ dateKey, events, setEvents, onClose }) {
     setEditId(null); setForm(emptyForm); setShowAdd(true);
   }
   function formToEvent(f) {
-    return { title:f.title.trim(), startDate:f.startDate, endDate:f.endDate||f.startDate, owner:f.owner, stress:f.stress, tags:f.tags.split(',').map(t=>t.trim()).filter(Boolean), note:f.note };
+    return { title:f.title.trim(), startDate:f.startDate, endDate:f.endDate||f.startDate, owner:f.owner, stress:f.stress, tags:f.tags.split(',').map(t=>t.trim()).filter(Boolean), note:f.note, _updatedAt:Date.now() };
   }
   function saveEdit() {
     if (!form.title.trim()) return;
@@ -1369,7 +1437,7 @@ function flattenProjects(demData) {
 function updateProjectInDem(setDemData, projectId, updates) {
   setDemData(d => ({
     ...d,
-    projects: (d.projects||[]).map(p => p.id===projectId ? {...p,...updates} : p),
+    projects: (d.projects||[]).map(p => p.id===projectId ? {...p,...updates,_updatedAt:Date.now()} : p),
   }));
 }
 
@@ -1414,7 +1482,7 @@ function ProjectDetailModal({ project, demData, setDemData, onClose }) {
       const list = d.actions[project.id]||[];
       const prev = list.find(a=>a.id===updated.id);
       const becomingDone = updated.status==='done' && prev && prev.status!=='done';
-      const updatedList = list.map(a => a.id===updated.id ? { ...a, ...updated } : a);
+      const updatedList = list.map(a => a.id===updated.id ? { ...a, ...updated, _updatedAt:Date.now() } : a);
       const spawned = becomingDone ? spawnNextRecurrence(updated) : null;
       return {
         ...d,
@@ -1429,7 +1497,7 @@ function ProjectDetailModal({ project, demData, setDemData, onClose }) {
       const target = list.find(a=>a.id===id);
       const becomingDone = target && target.status!=='done';
       const updatedList = list.map(a =>
-        a.id === id ? { ...a, status: a.status==='done'?'todo':'done', completedAt: a.status!=='done'?todayKey():null } : a
+        a.id === id ? { ...a, status: a.status==='done'?'todo':'done', completedAt: a.status!=='done'?todayKey():null, _updatedAt:Date.now() } : a
       );
       // Completion record stays on this action; if recurring, spawn the next occurrence
       const spawned = becomingDone ? spawnNextRecurrence(target) : null;
@@ -1663,7 +1731,7 @@ function updateActionInDem(setDemData, projectId, actionId, updates) {
     actions: {
       ...d.actions,
       [projectId]: (d.actions[projectId]||[]).map(a =>
-        a.id === actionId ? {...a,...updates} : a
+        a.id === actionId ? {...a,...updates,_updatedAt:Date.now()} : a
       ),
     },
   }));
@@ -2419,6 +2487,13 @@ function App() {
   const [loadErr, setLoadErr]   = useState('');
   const [syncing, setSyncing]   = useState(false);
   const [syncError, setSyncError] = useState('');
+  const [toast, setToast] = useState(null); // { text, kind: 'pull'|'push'|'success' }
+  const toastTimerRef = useRef(null);
+  function showToast(text, kind='pull', autoHideMs=null) {
+    clearTimeout(toastTimerRef.current);
+    setToast({ text, kind });
+    if (autoHideMs) toastTimerRef.current = setTimeout(() => setToast(null), autoHideMs);
+  }
   const saveTimerRef = useRef(null);
 
   // ── CRITICAL: prevent stale-local-data from overwriting fresher cloud data ──
@@ -2439,6 +2514,7 @@ function App() {
 
   async function fetchFromSheets() {
     setSyncing(true);
+    showToast('☁️ 正在從雲端拉取最新資料…', 'pull');
     try {
       const data = await sheetsLoadAll();
       setState(prev => {
@@ -2458,11 +2534,13 @@ function App() {
       });
       setLoadErr('');
       setSyncError('');
+      showToast('✅ 已更新為雲端最新資料', 'success', 2200);
       retryCountRef.current = 0;
       initialSyncDoneRef.current = true;
       setInitialSyncDone(true);
     } catch(err) {
       setLoadErr('同步失敗：' + err.message);
+      showToast('⚠ 讀取雲端資料失敗，稍後會自動重試', 'error', 3000);
       if (!initialSyncDoneRef.current) {
         // Haven't successfully pulled cloud data yet this session — keep local writes blocked and
         // retry the pull automatically, so we never push an unverified local snapshot to the cloud.
@@ -2488,29 +2566,70 @@ function App() {
     lastEditAtRef.current = Date.now();
     if (!IS_CONFIGURED || !initialSyncDoneRef.current) return; // don't push to cloud until we've pulled first
     clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => flushSaveNow(), 1200);
+    saveTimerRef.current = setTimeout(() => mergeAndSave(), 1200);
     return () => clearTimeout(saveTimerRef.current);
   }, [state, initialSyncDone]);
 
   const stateRef = useRef(state);
   useEffect(() => { stateRef.current = state; }, [state]);
 
-  function flushSaveNow() {
+  // Regular save path: pulls the latest cloud copy first, then merges it with local changes
+  // item-by-item (see mergeById etc. above) before writing — this is what lets two people
+  // editing different things on separate devices both keep their work.
+  async function mergeAndSave() {
     clearTimeout(saveTimerRef.current);
-    if (!IS_CONFIGURED || !initialSyncDoneRef.current) return; // still waiting on the first cloud pull
+    if (!IS_CONFIGURED || !initialSyncDoneRef.current) return;
     setSyncing(true);
+    showToast('☁️ 正在確認雲端最新資料…', 'pull');
+    try {
+      const local = stateRef.current;
+      let cloud = null;
+      try { cloud = await sheetsLoadAll(); } catch(e) { /* couldn't pull — fall back to pushing local as-is below */ }
+
+      showToast('⬆️ 正在上傳到雲端…', 'push');
+      const mergedDemData     = mergeDemData(cloud && cloud.demData, local.demData);
+      const mergedCalEvents   = mergeCalEventsData(cloud && cloud.calEvents, local.calEvents);
+      const mergedTodayStatus = mergeTodayStatus(cloud && cloud.todayStatus, local.todayStatus);
+      const mergedSupport     = mergeSupport(cloud && cloud.support, local.support);
+
+      await Promise.all([
+        sheetsSave('demData',     mergedDemData),
+        sheetsSave('calEvents',   mergedCalEvents),
+        sheetsSave('todayStatus', mergedTodayStatus),
+        sheetsSave('support',     mergedSupport),
+      ]);
+
+      // Reflect the merged result locally right away, so this device immediately sees whatever
+      // the other device had added — no need to wait for the next visibility-triggered refetch.
+      const changed = JSON.stringify({p:mergedDemData,e:mergedCalEvents,t:mergedTodayStatus,s:mergedSupport})
+                    !== JSON.stringify({p:local.demData,e:local.calEvents,t:local.todayStatus,s:local.support});
+      if (changed) setState(prev => ({ ...prev, demData:mergedDemData, calEvents:mergedCalEvents, todayStatus:mergedTodayStatus, support:mergedSupport }));
+      setSyncError('');
+      showToast('✅ 已上傳到雲端', 'success', 2000);
+    } catch(e) {
+      console.error('雲端同步失敗:', e);
+      setSyncError(IS_FILE_PROTOCOL
+        ? '本機檔案無法連上雲端，請改用網址開啟'
+        : (e && e.message ? e.message : '同步失敗，請檢查網路連線'));
+      showToast('⚠ 上傳雲端失敗', 'error', 3000);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  // Fast save path: used only when the tab/app is about to be backgrounded or closed. Skips the
+  // extra fetch-and-merge round trip (too slow to rely on right as the page is being suspended)
+  // and just pushes local state directly — the next normal edit will merge properly again.
+  function flushSaveFast() {
+    clearTimeout(saveTimerRef.current);
+    if (!IS_CONFIGURED || !initialSyncDoneRef.current) return;
     const s = stateRef.current;
     Promise.all([
       sheetsSave('demData',     s.demData),
       sheetsSave('calEvents',   s.calEvents),
       sheetsSave('todayStatus', s.todayStatus),
       sheetsSave('support',     s.support),
-    ]).then(()=>setSyncError('')).catch((e)=>{
-      console.error('雲端同步失敗:', e);
-      setSyncError(IS_FILE_PROTOCOL
-        ? '本機檔案無法連上雲端，請改用網址開啟'
-        : (e && e.message ? e.message : '同步失敗，請檢查網路連線'));
-    }).finally(()=>setSyncing(false));
+    ]).catch(()=>{});
   }
 
   // Cross-device sync fixes:
@@ -2523,18 +2642,18 @@ function App() {
     if (!IS_CONFIGURED) return;
     function handleVisibility() {
       if (document.hidden) {
-        flushSaveNow();
+        flushSaveFast();
       } else if (Date.now() - lastEditAtRef.current > 4000) {
         // Only auto-refresh if we haven't just been actively editing, to avoid clobbering in-progress typing
         fetchFromSheets();
       }
     }
     document.addEventListener('visibilitychange', handleVisibility);
-    window.addEventListener('pagehide', flushSaveNow);
+    window.addEventListener('pagehide', flushSaveFast);
     window.addEventListener('focus', handleVisibility);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
-      window.removeEventListener('pagehide', flushSaveNow);
+      window.removeEventListener('pagehide', flushSaveFast);
       window.removeEventListener('focus', handleVisibility);
     };
   }, []);
@@ -2600,6 +2719,17 @@ function App() {
       {!IS_FILE_PROTOCOL && IN_APP_BROWSER && (
         <div style={{position:'fixed',top:0,left:0,right:0,zIndex:200,background:'#C0887A',color:'#FDFAF5',fontSize:12,textAlign:'center',padding:'7px 12px'}}>
           ⚠ 偵測到你是用 LINE／FB／IG 內建瀏覽器打開的，這類瀏覽器有時會擋掉雲端同步。建議點右上角「⋯」選單改用「在瀏覽器中開啟」（Safari／Chrome）。
+        </div>
+      )}
+
+      {/* Sync toast — a brief, dismissible heads-up whenever we're about to pull from or push to the
+          cloud, so it's never a silent surprise. Auto-hides shortly after; doesn't block interaction. */}
+      {toast && (
+        <div style={{position:'fixed',bottom:18,left:'50%',transform:'translateX(-50%)',zIndex:300,
+          background: toast.kind==='error' ? '#C0887A' : '#2D4A3E', color:'#FDFAF5',
+          fontSize:12,padding:'8px 16px',borderRadius:20,boxShadow:'0 6px 20px rgba(45,40,35,.25)',
+          display:'flex',alignItems:'center',gap:6,maxWidth:'90vw',whiteSpace:'nowrap'}}>
+          {toast.text}
         </div>
       )}
 
