@@ -202,17 +202,41 @@ function nextRecurDate(fromDateStr, recurFreq, customDays) {
   else d.setDate(d.getDate()+(parseInt(customDays,10)||7));
   return d.toISOString().slice(0,10);
 }
-/* Given a just-completed action, returns a fresh clone for the next cycle (or null if one-time) */
-function spawnNextRecurrence(action) {
-  if (!action || action.recurType!=='recurring') return null;
+/* Marks a recurring action done: stays as the SAME card, records when it should reopen */
+function markActionDone(action) {
   return {
     ...action,
-    id: uid(),
-    status: 'todo',
-    completedAt: null,
-    dueDate: nextRecurDate(todayKey(), action.recurFreq, action.recurCustomDays),
+    status: 'done',
+    completedAt: todayKey(),
+    recurNextDate: action.recurType==='recurring' ? nextRecurDate(todayKey(), action.recurFreq, action.recurCustomDays) : null,
     _updatedAt: Date.now(),
   };
+}
+/* Marks an action not-done (undo), clearing any pending rollover date */
+function markActionUndone(action) {
+  return { ...action, status:'todo', completedAt:null, recurNextDate:null, _updatedAt:Date.now() };
+}
+/* Sweeps every action across every project: any recurring action that's been "done" past its
+   recurNextDate automatically reopens as todo (same card, same id — no duplicates). Keeps the
+   last completion date under lastCompletedAt so history isn't lost. Returns the SAME demData
+   reference untouched if nothing needs to roll over, so it never triggers pointless re-renders/saves. */
+function rolloverDueActions(demData) {
+  if (!demData || !demData.actions) return demData;
+  const today = todayKey();
+  let changed = false;
+  const actions = {};
+  Object.keys(demData.actions).forEach(pid => {
+    const list = demData.actions[pid] || [];
+    const newList = list.map(a => {
+      if (a && a.status==='done' && a.recurType==='recurring' && a.recurNextDate && a.recurNextDate <= today) {
+        changed = true;
+        return { ...a, status:'todo', lastCompletedAt:a.completedAt||a.lastCompletedAt||null, completedAt:null, recurNextDate:null, _updatedAt:Date.now() };
+      }
+      return a;
+    });
+    actions[pid] = newList;
+  });
+  return changed ? { ...demData, actions } : demData;
 }
 
 function buildDefault() {
@@ -1482,12 +1506,15 @@ function ProjectDetailModal({ project, demData, setDemData, onClose }) {
       const list = d.actions[project.id]||[];
       const prev = list.find(a=>a.id===updated.id);
       const becomingDone = updated.status==='done' && prev && prev.status!=='done';
-      const updatedList = list.map(a => a.id===updated.id ? { ...a, ...updated, _updatedAt:Date.now() } : a);
-      const spawned = becomingDone ? spawnNextRecurrence(updated) : null;
-      return {
-        ...d,
-        actions: { ...d.actions, [project.id]: spawned ? [...updatedList, spawned] : updatedList },
-      };
+      const leavingDone   = updated.status!=='done' && prev && prev.status==='done';
+      const updatedList = list.map(a => {
+        if (a.id !== updated.id) return a;
+        const merged = { ...a, ...updated };
+        if (becomingDone) return markActionDone(merged);
+        if (leavingDone)  return markActionUndone(merged);
+        return { ...merged, _updatedAt:Date.now() };
+      });
+      return { ...d, actions: { ...d.actions, [project.id]: updatedList } };
     });
     setEditingAction(null);
   }
@@ -1495,16 +1522,13 @@ function ProjectDetailModal({ project, demData, setDemData, onClose }) {
     setDemData(d => {
       const list = d.actions[project.id]||[];
       const target = list.find(a=>a.id===id);
-      const becomingDone = target && target.status!=='done';
-      const updatedList = list.map(a =>
-        a.id === id ? { ...a, status: a.status==='done'?'todo':'done', completedAt: a.status!=='done'?todayKey():null, _updatedAt:Date.now() } : a
-      );
-      // Completion record stays on this action; if recurring, spawn the next occurrence
-      const spawned = becomingDone ? spawnNextRecurrence(target) : null;
-      return {
-        ...d,
-        actions: { ...d.actions, [project.id]: spawned ? [...updatedList, spawned] : updatedList },
-      };
+      if (!target) return d;
+      const becomingDone = target.status!=='done';
+      const updatedList = list.map(a => {
+        if (a.id !== id) return a;
+        return becomingDone ? markActionDone(a) : markActionUndone(a);
+      });
+      return { ...d, actions: { ...d.actions, [project.id]: updatedList } };
     });
   }
   function deleteAction(id) {
@@ -1592,6 +1616,9 @@ function ProjectDetailModal({ project, demData, setDemData, onClose }) {
                 <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'rgba(45,74,62,.04)',borderRadius:8}}>
                   <button onClick={()=>toggleAction(a.id)} style={{width:15,height:15,borderRadius:3,border:'none',background:'#2D4A3E',cursor:'pointer',flexShrink:0,color:'#F8F6F1',fontSize:9,display:'flex',alignItems:'center',justifyContent:'center'}}>✓</button>
                   <span style={{flex:1,fontSize:12,color:'#A09688',textDecoration:'line-through'}}>{a.recurType==='recurring'&&'🔁 '}{a.title}</span>
+                  {a.recurType==='recurring' && a.recurNextDate &&
+                    <span style={{fontSize:9,color:'#5BA37B',flexShrink:0}}>下次 {a.recurNextDate.slice(5).replace('-','/')}</span>}
+                  <button onClick={()=>setEditingAction(a)} title="編輯 / 設定循環" style={{background:'none',border:'none',fontSize:12,color:'#C8C0B4',cursor:'pointer'}}>⚙</button>
                   <button onClick={()=>deleteAction(a.id)} style={{background:'none',border:'none',fontSize:12,color:'#C8C0B4',cursor:'pointer'}}>×</button>
                 </div>
               ))}
@@ -1769,6 +1796,8 @@ function ActionCard({ action, onOpen, dragging, onDragStart, onDragEnd }) {
       <div style={{display:'flex',alignItems:'center',gap:7,flexWrap:'wrap'}}>
         <span style={{fontSize:12}}>{ownerEmoji}</span>
         {action.dueDate&&<span style={{fontSize:9,color:'#A09688'}}>📅 {action.dueDate.slice(5).replace('-','/')}</span>}
+        {action.status==='done' && action.recurType==='recurring' && action.recurNextDate &&
+          <span style={{fontSize:9,color:'#5BA37B'}}>🔁 下次 {action.recurNextDate.slice(5).replace('-','/')}</span>}
       </div>
     </div>
   );
@@ -1902,18 +1931,13 @@ function ProjectsPage({ demData, setDemData }) {
 
   function changeStatus(action, status) {
     const becomingDone = status==='done' && action.status!=='done';
-    updateActionInDem(setDemData, action.projectId, action.id, {
-      status,
-      completedAt: status==='done' ? todayKey() : null,
-    });
+    const leavingDone   = status!=='done' && action.status==='done';
     if (becomingDone) {
-      const spawned = spawnNextRecurrence(action);
-      if (spawned) {
-        setDemData(d => ({
-          ...d,
-          actions: { ...d.actions, [action.projectId]: [...(d.actions[action.projectId]||[]), spawned] },
-        }));
-      }
+      updateActionInDem(setDemData, action.projectId, action.id, markActionDone(action));
+    } else if (leavingDone) {
+      updateActionInDem(setDemData, action.projectId, action.id, markActionUndone(action));
+    } else {
+      updateActionInDem(setDemData, action.projectId, action.id, { status });
     }
   }
 
@@ -1926,23 +1950,20 @@ function ProjectsPage({ demData, setDemData }) {
 
   function saveEditedAction(updated) {
     const becomingDone = updated.status==='done' && editAction && editAction.status!=='done';
-    updateActionInDem(setDemData, updated.projectId, updated.id, {
+    const leavingDone   = updated.status!=='done' && editAction && editAction.status==='done';
+    const base = {
       title: updated.title, desc: updated.desc,
       assignee: updated.assignee, dueDate: updated.dueDate,
-      status: updated.status,
-      completedAt: updated.status==='done'?(updated.completedAt||todayKey()):null,
       recurType: updated.recurType||'once',
       recurFreq: updated.recurFreq||'weekly',
       recurCustomDays: updated.recurCustomDays||7,
-    });
+    };
     if (becomingDone) {
-      const spawned = spawnNextRecurrence(updated);
-      if (spawned) {
-        setDemData(d => ({
-          ...d,
-          actions: { ...d.actions, [updated.projectId]: [...(d.actions[updated.projectId]||[]), spawned] },
-        }));
-      }
+      updateActionInDem(setDemData, updated.projectId, updated.id, { ...base, ...markActionDone(updated) });
+    } else if (leavingDone) {
+      updateActionInDem(setDemData, updated.projectId, updated.id, { ...base, ...markActionUndone(updated) });
+    } else {
+      updateActionInDem(setDemData, updated.projectId, updated.id, { ...base, status: updated.status });
     }
   }
 
@@ -2521,7 +2542,7 @@ function App() {
         try {
           const next = { ...prev };
           // migrateData validates format; falls back to buildDefault() if wrong format
-          if (data.demData)     next.demData     = migrateData(data.demData);
+          if (data.demData)     next.demData     = rolloverDueActions(migrateData(data.demData));
           if (data.calEvents && Array.isArray(data.calEvents)) next.calEvents = migrateCalEvents(data.calEvents);
           if (data.todayStatus) next.todayStatus = data.todayStatus;
           if (data.support)     next.support     = data.support;
@@ -2587,7 +2608,7 @@ function App() {
       try { cloud = await sheetsLoadAll(); } catch(e) { /* couldn't pull — fall back to pushing local as-is below */ }
 
       showToast('⬆️ 正在上傳到雲端…', 'push');
-      const mergedDemData     = mergeDemData(cloud && cloud.demData, local.demData);
+      const mergedDemData     = rolloverDueActions(mergeDemData(cloud && cloud.demData, local.demData));
       const mergedCalEvents   = mergeCalEventsData(cloud && cloud.calEvents, local.calEvents);
       const mergedTodayStatus = mergeTodayStatus(cloud && cloud.todayStatus, local.todayStatus);
       const mergedSupport     = mergeSupport(cloud && cloud.support, local.support);
@@ -2631,6 +2652,22 @@ function App() {
       sheetsSave('support',     s.support),
     ]).catch(()=>{});
   }
+
+  // Recurring actions: periodically check whether any "done" recurring action has reached its
+  // next-cycle date and should automatically reopen as todo (same card, no duplicates). Runs on
+  // mount and every 15 minutes in case the app is left open across a day boundary — works even
+  // without cloud sync configured, since it's a pure local-state check.
+  useEffect(() => {
+    function checkRollovers() {
+      setState(prev => {
+        const rolled = rolloverDueActions(prev.demData);
+        return rolled === prev.demData ? prev : { ...prev, demData: rolled };
+      });
+    }
+    checkRollovers();
+    const iv = setInterval(checkRollovers, 15 * 60 * 1000);
+    return () => clearInterval(iv);
+  }, []);
 
   // Cross-device sync fixes:
   // 1. When this tab/app comes back into view, pull the latest data — otherwise a tab left open
