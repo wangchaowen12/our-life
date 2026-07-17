@@ -280,16 +280,22 @@ function buildDefaultState() {
    each item has the newer _updatedAt timestamp, and unioning items that only exist on
    one side. This means two people editing DIFFERENT items on separate devices both
    keep their work, instead of whoever hits save second wiping out the other's changes.
-   Known limitation: deleting an item on one device can be "revived" by a merge if the
-   other device's stale copy still has it — we accept that trade-off since losing an
-   edit silently is worse than an occasional item reappearing. ──────────────────────*/
+
+   DELETIONS need special handling: a plain id-union merge can't tell "the cloud doesn't
+   know about this new item yet" apart from "this item used to exist and was deleted" —
+   both just look like "missing from one side". So whenever something is deleted locally,
+   its id goes into pendingDeleteIds for the rest of this session; the merge then actively
+   excludes that id even if a (stale) cloud copy still has it, instead of quietly reviving it. */
+const pendingDeleteIds = new Set();
+function markDeletedForSync(...ids) { ids.forEach(id => id && pendingDeleteIds.add(id)); }
+
 function mergeById(cloudList, localList) {
   const cloudArr = Array.isArray(cloudList) ? cloudList : [];
   const localArr = Array.isArray(localList) ? localList : [];
   const map = new Map();
-  cloudArr.forEach(item => { if (item && item.id) map.set(item.id, item); });
+  cloudArr.forEach(item => { if (item && item.id && !pendingDeleteIds.has(item.id)) map.set(item.id, item); });
   localArr.forEach(item => {
-    if (!item || !item.id) return;
+    if (!item || !item.id || pendingDeleteIds.has(item.id)) return;
     const existing = map.get(item.id);
     if (!existing) { map.set(item.id, item); return; }
     const localT = item._updatedAt || 0, cloudT = existing._updatedAt || 0;
@@ -867,6 +873,7 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
   },[setData]);
 
   const deleteNode = useCallback((layer,parentId,id)=>{
+    markDeletedForSync(id);
     setData(d=>{
       if(layer==='projects') return{...d,projects:(d.projects||[]).filter(n=>n.id!==id)};
       if(layer==='actions')  return{...d,actions:{...d.actions,[parentId]:(d.actions[parentId]||[]).filter(n=>n.id!==id)}};
@@ -1374,6 +1381,7 @@ function DayModal({ dateKey, events, setEvents, onClose }) {
   }
   function deleteEvent(id) {
     if (window.confirm('確定要刪除這個事件嗎？')) {
+      markDeletedForSync(id);
       setEvents(prev=>prev.filter(e=>e.id!==id));
       if (editId===id) setEditId(null);
     }
@@ -1532,6 +1540,7 @@ function ProjectDetailModal({ project, demData, setDemData, onClose }) {
     });
   }
   function deleteAction(id) {
+    markDeletedForSync(id);
     setDemData(d => ({
       ...d,
       actions: { ...d.actions, [project.id]: (d.actions[project.id]||[]).filter(a => a.id!==id) },
@@ -1539,10 +1548,12 @@ function ProjectDetailModal({ project, demData, setDemData, onClose }) {
   }
   function deleteProject() {
     if (!window.confirm('確定要刪除這個專案嗎？')) return;
-    setDemData(d => ({
-      ...d,
-      projects: (d.projects||[]).filter(p => p.id!==project.id),
-    }));
+    const orphanedActionIds = (demData.actions[project.id]||[]).map(a=>a.id);
+    markDeletedForSync(project.id, ...orphanedActionIds);
+    setDemData(d => {
+      const { [project.id]:_, ...restActions } = d.actions;
+      return { ...d, projects: (d.projects||[]).filter(p => p.id!==project.id), actions: restActions };
+    });
     onClose();
   }
 
@@ -1969,6 +1980,7 @@ function ProjectsPage({ demData, setDemData }) {
 
   function deleteAction(action) {
     if (!window.confirm('確定刪除這個行動嗎？')) return;
+    markDeletedForSync(action.id);
     setDemData(d=>({
       ...d,
       actions:{...d.actions,[action.projectId]:(d.actions[action.projectId]||[]).filter(a=>a.id!==action.id)},
