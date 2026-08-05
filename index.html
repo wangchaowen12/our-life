@@ -32,7 +32,7 @@
     .dem-breathe{animation:demBreathe 4s ease-in-out infinite}
     @keyframes dialogIn{from{opacity:0;transform:scale(.95) translateY(6px)}to{opacity:1;transform:scale(1) translateY(0)}}
     /* ── Layout ── */
-    .platform{display:flex;height:100vh;overflow:hidden}
+    .platform{display:flex;height:100vh;height:100dvh;overflow:hidden}
     .sidebar{width:64px;flex-shrink:0;background:#2D4A3E;display:flex;flex-direction:column;align-items:center;padding:16px 0 20px;gap:2px;z-index:50}
     .sidebar-brand{width:36px;height:36px;border-radius:10px;background:rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;margin-bottom:8px;font-size:16px;cursor:default}
     .nav-btn{width:44px;height:44px;border-radius:12px;border:none;background:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;transition:background .15s}
@@ -53,7 +53,7 @@
       .platform{flex-direction:column}
       .page-content{padding-bottom:58px}
     }
-    .page-scroll{flex:1;overflow-y:auto;overflow-x:hidden}
+    .page-scroll{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch}
     .page-scroll::-webkit-scrollbar{width:4px}
     .page-scroll::-webkit-scrollbar-thumb{background:#D8D0C4;border-radius:4px}
     .card{background:rgba(255,255,255,.75);border:1px solid rgba(180,172,160,.4);border-radius:16px}
@@ -315,14 +315,43 @@ function mergeUpdatesArray(cloudArr, localArr) {
   [...(cloudArr||[]), ...(localArr||[])].forEach(u => { if (u) map.set(key(u), u); });
   return Array.from(map.values()).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
 }
+/* mergeById gets the CONTENT right (which item wins per id) but not ORDER — a plain union
+   always comes out in "cloud order, then any local-only extras appended", so a drag-reorder
+   done locally would get silently undone by the very next sync. To fix that, every reorderable
+   list is paired with an "OrderAt" timestamp (bumped only when the list is actually reordered,
+   never when an item's content is edited) — whichever side reordered more recently determines
+   the sequence used for the merged result; any item not part of that sequence (newly added
+   elsewhere) is appended at the end. */
+function mergeOrderedById(cloudList, localList, cloudOrderAt, localOrderAt) {
+  const idMerged = mergeById(cloudList, localList);
+  const useLocalOrder = (localOrderAt||0) >= (cloudOrderAt||0);
+  const baseArr = useLocalOrder ? (Array.isArray(localList)?localList:[]) : (Array.isArray(cloudList)?cloudList:[]);
+  const byId = new Map(idMerged.map(it => [it.id, it]));
+  const ordered = [];
+  const seen = new Set();
+  baseArr.forEach(it => { if (it && byId.has(it.id) && !seen.has(it.id)) { ordered.push(byId.get(it.id)); seen.add(it.id); } });
+  idMerged.forEach(it => { if (!seen.has(it.id)) { ordered.push(it); seen.add(it.id); } });
+  return ordered;
+}
 function mergeDemData(cloudDem, localDem) {
   const cloud = cloudDem || {};
   const local = localDem || buildDefault();
-  const projects = mergeById(cloud.projects, local.projects);
+  const projects = mergeOrderedById(cloud.projects, local.projects, cloud.projectsOrderAt, local.projectsOrderAt);
   const pids = new Set([...Object.keys(cloud.actions||{}), ...Object.keys(local.actions||{})]);
   const actions = {};
-  pids.forEach(pid => { actions[pid] = mergeById((cloud.actions||{})[pid], (local.actions||{})[pid]); });
-  return { dream: local.dream || cloud.dream || makeNode('共創理想生活'), projects, actions };
+  const cloudActionsOrderAt = cloud.actionsOrderAt || {};
+  const localActionsOrderAt = local.actionsOrderAt || {};
+  const actionsOrderAt = {};
+  pids.forEach(pid => {
+    actions[pid] = mergeOrderedById((cloud.actions||{})[pid], (local.actions||{})[pid], cloudActionsOrderAt[pid], localActionsOrderAt[pid]);
+    actionsOrderAt[pid] = Math.max(cloudActionsOrderAt[pid]||0, localActionsOrderAt[pid]||0);
+  });
+  return {
+    dream: local.dream || cloud.dream || makeNode('共創理想生活'),
+    projects, actions,
+    projectsOrderAt: Math.max(cloud.projectsOrderAt||0, local.projectsOrderAt||0),
+    actionsOrderAt,
+  };
 }
 function mergeCalEventsData(cloudEv, localEv) {
   return mergeById(cloudEv, localEv);
@@ -892,7 +921,7 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
     setTimeout(()=>setEditTarget({node:n,layer,parentId}),50);
   },[setData]);
 
-  // ── Life Domains drag & drop reordering (depth 0 only) ──
+  // ── Drag & drop reordering — Life Domains (depth 0) AND Actions within a project (depth 1) ──
   const [dragIdx, setDragIdx]         = useState(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
   const reorderProjects = useCallback((fromIdx, toIdx) => {
@@ -902,11 +931,24 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
       if (fromIdx<0||fromIdx>=list.length||toIdx<0||toIdx>=list.length) return d;
       const [moved] = list.splice(fromIdx,1);
       list.splice(toIdx,0,moved);
-      return {...d, projects:list};
+      return {...d, projects:list, projectsOrderAt:Date.now()};
+    });
+  },[setData]);
+  const reorderActions = useCallback((parentId, fromIdx, toIdx) => {
+    if (fromIdx===null || toIdx===null || fromIdx===toIdx) return;
+    setData(d => {
+      const list = [...(d.actions[parentId]||[])];
+      if (fromIdx<0||fromIdx>=list.length||toIdx<0||toIdx>=list.length) return d;
+      const [moved] = list.splice(fromIdx,1);
+      list.splice(toIdx,0,moved);
+      return {...d, actions:{...d.actions,[parentId]:list}, actionsOrderAt:{...(d.actionsOrderAt||{}),[parentId]:Date.now()}};
     });
   },[setData]);
   function handleDropNode(toIdx) {
-    if (toIdx!==null) reorderProjects(dragIdx, toIdx);
+    if (toIdx!==null) {
+      if (current.depth===0) reorderProjects(dragIdx, toIdx);
+      else reorderActions(current.id, dragIdx, toIdx);
+    }
     setDragIdx(null); setDragOverIdx(null);
   }
 
@@ -973,7 +1015,7 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
             {stack.length>1&&<div style={{textAlign:'center',marginTop:8,fontSize:10,color:'#C0B8AE',letterSpacing:'.06em'}}>點擊返回</div>}
           </div>
           {slots.map((node,i)=>{const pos=positions[i];return(<OrbitNode key={node?node.id:'empty_'+i} node={node} pos={pos} delay={phase==='enter'?i*25:0} isPlaceholder={!node} onZoomIn={()=>node?zoomIn(node):addNode(currentLayer,current.id)} onEdit={()=>node&&setEditTarget({node,layer:currentLayer,parentId:current.id})}
-            reorderable={current.depth===0} dragIndex={i}
+            reorderable={true} dragIndex={i}
             onDragStartNode={setDragIdx} onDragOverNode={setDragOverIdx} onDropNode={handleDropNode}
             isDragOver={dragOverIdx===i && dragIdx!==i} isDragging={dragIdx===i}
             onOwnerChange={node ? (current.depth===0 ? (o)=>changeProjectOwner(node.id,o) : (o)=>changeActionOwner(current.id,node.id,o)) : undefined}
@@ -981,7 +1023,7 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
         </div>
       </div>
 
-      {stack.length===1&&phase==='idle'&&<div style={{textAlign:'center',padding:'0 0 16px',fontSize:11,color:'#C8C0B4',letterSpacing:'.08em',flexShrink:0}}>點擊節點展開 · 點右上角 ✎ 編輯 · 拖曳 ⠿ 排序 · 點選圖示可直接切換負責人</div>}
+      {phase==='idle'&&<div style={{textAlign:'center',padding:'0 0 16px',fontSize:11,color:'#C8C0B4',letterSpacing:'.08em',flexShrink:0}}>點擊節點展開 · 點右上角 ✎ 編輯 · 拖曳 ⠿ 排序 · 點選圖示可直接切換負責人</div>}
 
       {editTarget&&(
         <EditDialog node={editTarget.node} layer={editTarget.layer} onSave={u=>updateNode(editTarget.layer,editTarget.parentId,u)} onDelete={id=>deleteNode(editTarget.layer,editTarget.parentId,id)} onClose={()=>setEditTarget(null)} support={support} onSupportChange={onSupportChange} />
@@ -2083,7 +2125,7 @@ function ProjectsPage({ demData, setDemData }) {
               <span style={{fontSize:11,fontWeight:500,color:col.accent,letterSpacing:'.04em'}}>{col.label}</span>
               <span style={{fontSize:10,color:'#C0B8AE',background:'rgba(180,172,160,.16)',borderRadius:8,padding:'1px 6px'}}>{cols[col.key].length}</span>
             </div>
-            <div style={{flex:1,overflowY:'auto',padding:'8px 9px',display:'flex',flexDirection:'column',gap:6}}>
+            <div style={{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch',padding:'8px 9px 28px',display:'flex',flexDirection:'column',gap:6}}>
               {cols[col.key].map(a=>(
                 <ActionCard key={a.id} action={a} onOpen={()=>setEditAction(a)}
                   dragging={draggingId===a.id}
