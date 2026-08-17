@@ -188,12 +188,13 @@ function makeNode(title, desc='') {
 }
 function makeAction(title) {
   return { id:uid(), title, desc:'', image:null, updates:[], status:'todo', assignee:'us', dueDate:null, completedAt:null,
-    recurType:'once', recurFreq:'weekly', recurCustomDays:7, subitems:[], _updatedAt: Date.now() };
+    recurType:'once', recurFreq:'weekly', recurCustomDays:7, subitems:[], monthlyFocus:false, _updatedAt: Date.now() };
 }
 /* ── Action subitems (checklist under an Action, max 4) ──
-   Each subitem: { id, title, done }. Free-form, user-created; an Action may have 0–4. */
+   Each subitem: { id, title, done, assignee }. Free-form, user-created; an Action may have 0–4.
+   assignee is 'apple' or 'pine' only (no shared "us" option at this level). */
 function makeSubitem(title='') {
-  return { id:uid(), title, done:false };
+  return { id:uid(), title, done:false, assignee:'apple' };
 }
 /* ── Recurring Action helpers ──
    recurType: 'once' | 'recurring'
@@ -530,14 +531,8 @@ function EditDialog({ node, layer, onSave, onDelete, onClose, support, onSupport
   const [updateText, setUpdateText] = useState('');
   const [neededText, setNeededText] = useState('');
   const [receivedText, setReceivedText] = useState('');
-  const [tab, setTab] = useState('basic'); // basic | updates | support | subitems (actions only)
-  // Subitems (Action layer only): up to 4 user-defined checklist items under an Action.
-  // Existing ones are edited as-is; a fresh Action with none starts with 4 blank rows to fill in.
-  const [subitems, setSubitems] = useState(() => {
-    if (layer!=='actions') return node.subitems||[];
-    const existing = (node.subitems||[]).filter(s=>s && typeof s.title==='string').slice(0,4);
-    return existing.length===0 ? [0,1,2,3].map(()=>makeSubitem('')) : existing;
-  });
+  const isSubitem = layer==='subitems'; // Subitem petals (depth-2 leaf nodes): just a title + delete, nothing else applies.
+  const [tab, setTab] = useState('basic'); // basic | image | updates | support
   const titleRef = useRef();
   const sup = support[node.id] || { needed:[], received:[] };
 
@@ -545,23 +540,12 @@ function EditDialog({ node, layer, onSave, onDelete, onClose, support, onSupport
 
   function handleSave() {
     if (!title.trim()) return;
-    const cleanSubitems = layer==='actions'
-      ? subitems.filter(s=>s && s.title && s.title.trim()).slice(0,4).map(s=>({...s,title:s.title.trim()}))
-      : node.subitems;
-    onSave({ ...node, title:title.trim(), desc:desc.trim(), image, updates, owner, assignee: node.assignee!==undefined ? owner : undefined, subitems:cleanSubitems });
+    if (isSubitem) { onSave({ ...node, title:title.trim() }); onClose(); return; }
+    onSave({ ...node, title:title.trim(), desc:desc.trim(), image, updates, owner, assignee: node.assignee!==undefined ? owner : undefined });
     onClose();
   }
   function handleDelete() {
     if (window.confirm(`確定要刪除「${node.title}」嗎？`)) { onDelete(node.id); onClose(); }
-  }
-  function updateSubitem(id, updates) {
-    setSubitems(list => list.map(s => s.id===id ? {...s,...updates} : s));
-  }
-  function removeSubitem(id) {
-    setSubitems(list => list.filter(s => s.id!==id));
-  }
-  function addSubitem() {
-    setSubitems(list => list.length>=4 ? list : [...list, makeSubitem('')]);
   }
   function addUpdate() {
     if (!updateText.trim()) return;
@@ -593,10 +577,9 @@ function EditDialog({ node, layer, onSave, onDelete, onClose, support, onSupport
         {/* Tabs */}
         <div style={{display:'flex',gap:4,padding:'14px 16px 0',borderBottom:'1px solid #EDE8E0',flexShrink:0}}>
           <button style={tabStyle('basic')} onClick={()=>setTab('basic')}>基本</button>
-          <button style={tabStyle('image')} onClick={()=>setTab('image')}>圖片</button>
-          {layer==='actions' && <button style={tabStyle('subitems')} onClick={()=>setTab('subitems')}>細項 {subitems.filter(s=>s.title&&s.title.trim()).length>0?`(${subitems.filter(s=>s.title&&s.title.trim()).length})`:''}</button>}
-          <button style={tabStyle('updates')} onClick={()=>setTab('updates')}>更新 {updates.length>0?`(${updates.length})`:''}</button>
-          <button style={tabStyle('support')} onClick={()=>setTab('support')}>支持</button>
+          {!isSubitem && <button style={tabStyle('image')} onClick={()=>setTab('image')}>圖片</button>}
+          {!isSubitem && <button style={tabStyle('updates')} onClick={()=>setTab('updates')}>更新 {updates.length>0?`(${updates.length})`:''}</button>}
+          {!isSubitem && <button style={tabStyle('support')} onClick={()=>setTab('support')}>支持</button>}
         </div>
 
         {/* Content */}
@@ -604,7 +587,7 @@ function EditDialog({ node, layer, onSave, onDelete, onClose, support, onSupport
           {tab==='basic' && (
             <div style={{display:'flex',flexDirection:'column',gap:14}}>
               <div>
-                <label style={{display:'block',fontSize:10,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:5}}>標題</label>
+                <label style={{display:'block',fontSize:10,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:5}}>{isSubitem?'細項名稱':'標題'}</label>
                 <div className="voice-field-row">
                   <input ref={titleRef} value={title} onChange={e=>setTitle(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSave()} placeholder="節點名稱…" />
                   <MicButton onAppend={t=>setTitle(v=>v+t)} />
@@ -621,52 +604,21 @@ function EditDialog({ node, layer, onSave, onDelete, onClose, support, onSupport
                   </select>
                 </div>
               )}
-              <div>
-                <label style={{display:'block',fontSize:10,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:5}}>描述</label>
-                <VoiceField as="textarea" value={desc} onChange={setDesc} placeholder="這個節點的意義…" rows={3} />
-              </div>
+              {!isSubitem && (
+                <div>
+                  <label style={{display:'block',fontSize:10,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:5}}>描述</label>
+                  <VoiceField as="textarea" value={desc} onChange={setDesc} placeholder="這個節點的意義…" rows={3} />
+                </div>
+              )}
             </div>
           )}
-          {tab==='image' && (
+          {tab==='image' && !isSubitem && (
             <div style={{display:'flex',flexDirection:'column',gap:10}}>
               <p style={{fontSize:12,color:'#A09688'}}>上傳一張代表這個節點的照片或願景圖</p>
               <ImageUploadField value={image} onChange={setImage} />
             </div>
           )}
-          {tab==='subitems' && layer==='actions' && (
-            <div style={{display:'flex',flexDirection:'column',gap:10}}>
-              <p style={{fontSize:12,color:'#A09688',lineHeight:1.6}}>最多 4 個細項，可自訂內容；點擊左側方塊可標示完成，不需要全部填滿。</p>
-              <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                {subitems.map(s=>(
-                  <div key={s.id} style={{display:'flex',alignItems:'center',gap:8}}>
-                    <button type="button" onClick={()=>updateSubitem(s.id,{done:!s.done})}
-                      title={s.done?'標示未完成':'標示完成'}
-                      style={{width:19,height:19,borderRadius:5,flexShrink:0,cursor:'pointer',
-                        border: s.done? 'none' : '1.5px solid #C8C0B4',
-                        background: s.done? '#5BA37B' : '#FFF',
-                        color:'#F8F6F1',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                      {s.done?'✓':''}
-                    </button>
-                    <input value={s.title} onChange={e=>updateSubitem(s.id,{title:e.target.value})}
-                      placeholder="細項名稱…"
-                      style={{flex:1,fontSize:13,padding:'8px 10px',borderRadius:9,border:'1.5px solid #E0D9CF',
-                        background: s.done? 'rgba(91,163,123,.08)' : '#FFF',
-                        color: s.done? '#5BA37B' : '#3D3830',
-                        textDecoration: s.done? 'line-through' : 'none',fontFamily:'inherit'}} />
-                    <button type="button" onClick={()=>removeSubitem(s.id)} title="刪除細項"
-                      style={{background:'none',border:'none',fontSize:15,color:'#C8C0B4',cursor:'pointer',flexShrink:0}}>×</button>
-                  </div>
-                ))}
-                {subitems.length<4 && (
-                  <button type="button" onClick={addSubitem}
-                    style={{alignSelf:'flex-start',background:'none',border:'1.5px dashed #D8D0C4',borderRadius:9,padding:'6px 12px',fontSize:12,color:'#A09688',cursor:'pointer',marginTop:2,fontFamily:'inherit'}}>
-                    ＋ 新增細項
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-          {tab==='updates' && (
+          {tab==='updates' && !isSubitem && (
             <div style={{display:'flex',flexDirection:'column',gap:12}}>
               <div style={{display:'flex',gap:8}}>
                 <input value={updateText} onChange={e=>setUpdateText(e.target.value)} placeholder="記錄一個新進展…" style={{flex:1}} onKeyDown={e=>e.key==='Enter'&&addUpdate()} />
@@ -682,7 +634,7 @@ function EditDialog({ node, layer, onSave, onDelete, onClose, support, onSupport
               ))}
             </div>
           )}
-          {tab==='support' && (
+          {tab==='support' && !isSubitem && (
             <div style={{display:'flex',flexDirection:'column',gap:16}}>
               <div>
                 <p style={{fontSize:11,color:'#A09688',marginBottom:8,letterSpacing:'.04em'}}>我希望伴侶如何支持我</p>
@@ -726,12 +678,10 @@ function EditDialog({ node, layer, onSave, onDelete, onClose, support, onSupport
 /* ════════════════════════════════════════════════════════
    DEM — OrbitNode
 ════════════════════════════════════════════════════════ */
-function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reorderable, onOwnerChange, dragIndex, onDragStartNode, onDragOverNode, onDropNode, isDragOver, isDragging, subitemsEnabled, onToggleSubitem }) {
+function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reorderable, onOwnerChange, dragIndex, onDragStartNode, onDragOverNode, onDropNode, isDragOver, isDragging, kind, onToggleDone, onToggleFeature }) {
   const [hovered, setHovered] = useState(false);
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false);
-  const [subitemsOpen, setSubitemsOpen] = useState(false);
   const pickerRef = useRef(null);
-  const subitemsRef = useRef(null);
 
   // Close the owner picker when clicking anywhere outside it
   useEffect(() => {
@@ -747,34 +697,26 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reordera
     };
   }, [ownerPickerOpen]);
 
-  // Close the subitems checklist popover when clicking anywhere outside it
-  useEffect(() => {
-    if (!subitemsOpen) return;
-    function handleOutside(e) {
-      if (subitemsRef.current && !subitemsRef.current.contains(e.target)) setSubitemsOpen(false);
-    }
-    document.addEventListener('mousedown', handleOutside);
-    document.addEventListener('touchstart', handleOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleOutside);
-      document.removeEventListener('touchstart', handleOutside);
-    };
-  }, [subitemsOpen]);
-
   const OC = {
     apple:{ border:'rgba(232,149,109,.55)', bg:'rgba(232,149,109,.09)', accent:'#E8956D', glow:'rgba(232,149,109,.22)' },
     pine: { border:'rgba(45,74,62,.5)',     bg:'rgba(45,74,62,.08)',    accent:'#2D4A3E', glow:'rgba(45,74,62,.20)'    },
     us:   { border:'rgba(139,123,175,.5)',  bg:'rgba(139,123,175,.08)', accent:'#8B7BAF', glow:'rgba(139,123,175,.20)' },
+    done: { border:'rgba(91,163,123,.6)',   bg:'rgba(91,163,123,.14)',  accent:'#5BA37B', glow:'rgba(91,163,123,.25)'  },
   };
+  const isSubitem     = kind==='subitem';
+  const isAction      = kind==='action';
+  const isSubitemDone = isSubitem && !!node?.done;
+  const isFeatured    = isAction && !!node?.monthlyFocus;
   const nodeOwner = node?._owner || node?.owner || node?.assignee || 'us';
-  const oc  = OC[nodeOwner] || OC.us;
+  const oc  = isSubitemDone ? OC.done : (OC[nodeOwner] || OC.us);
   const pct = (node?._actCount > 0) ? Math.round((node?._actDone||0) / node._actCount * 100) : null;
   const OUTER = 118, INNER = 104, r = (OUTER - 8) / 2;
   const circ  = 2 * Math.PI * r;
   const ownerEmoji = nodeOwner==='apple'?'🍎':nodeOwner==='pine'?'🌲':'🤝';
-  const subitems = (subitemsEnabled && node && node.subitems) ? node.subitems.filter(s=>s && s.title && s.title.trim()) : [];
-  const hasSubitems = subitems.length>0;
-  const subitemsDone = subitems.filter(s=>s.done).length;
+  // Subitems only ever belong to 蘋果派 or 松果 — no shared "us" option at this level.
+  const ownerOptions = isSubitem
+    ? [{k:'apple',e:'🍎',l:'蘋果派'},{k:'pine',e:'🌲',l:'松果'}]
+    : [{k:'apple',e:'🍎',l:'蘋果派'},{k:'pine',e:'🌲',l:'松果'},{k:'us',e:'💜',l:'我們'}];
 
   if (isPlaceholder) {
     return (
@@ -788,6 +730,9 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reordera
       </div>
     );
   }
+
+  // Subitem petals are leaves — clicking the circle toggles done instead of navigating deeper.
+  const mainClick = isSubitem ? (e=>{e.stopPropagation(); onToggleDone&&onToggleDone(!node.done);}) : onZoomIn;
 
   return (
     <div className="node-orbit" style={{left:`${pos.x}%`,top:`${pos.y}%`,animationDelay:`${delay}ms`,opacity:isDragging?.35:1}}
@@ -831,13 +776,26 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reordera
           </div>
         )}
 
+        {/* 本月執行重點 star toggle — Action layer only */}
+        {isAction && (
+          <div onClick={e=>{e.stopPropagation();onToggleFeature&&onToggleFeature(!node.monthlyFocus);}}
+            title={isFeatured?'取消本月執行重點':'設為本月執行重點'}
+            style={{position:'absolute',bottom:4,left:'50%',transform:'translateX(-50%)',width:22,height:22,borderRadius:'50%',
+              background: isFeatured ? '#E8B54D' : (hovered?'rgba(45,40,35,.12)':'transparent'),
+              display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',
+              opacity: isFeatured||hovered?1:0, transition:'all .15s',zIndex:3,fontSize:11,
+              color: isFeatured?'#FFF':'#A09688'}}>
+            {isFeatured?'⭐':'☆'}
+          </div>
+        )}
+
         {/* Main circle */}
-        <div onClick={hasSubitems ? (e=>{e.stopPropagation();setSubitemsOpen(o=>!o);}) : onZoomIn}
+        <div onClick={mainClick} title={isSubitem?(node.done?'點擊標示未完成':'點擊標示完成'):undefined}
           style={{
             position:'absolute', top:(OUTER-INNER)/2, left:(OUTER-INNER)/2,
             width:INNER, height:INNER, borderRadius:'50%',
             background: hovered ? 'rgba(255,255,255,.96)' : oc.bg,
-            border:`1.5px solid ${hovered ? oc.border : 'rgba(180,172,160,.28)'}`,
+            border:`1.5px solid ${hovered ? oc.border : (isSubitemDone?oc.border:'rgba(180,172,160,.28)')}`,
             backdropFilter:'blur(10px)',
             display:'flex',alignItems:'center',justifyContent:'center',
             flexDirection:'column',gap:2,
@@ -855,7 +813,8 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reordera
             </div>
           )}
 
-          {/* Owner emoji — clickable to change owner directly when onOwnerChange is provided */}
+          {/* Owner emoji — clickable to change owner (apple/pine[/us]) directly when onOwnerChange is provided.
+              Subitem petals show completion via the circle's own color + strikethrough (see above), not a separate icon. */}
           <span
             onClick={onOwnerChange ? (e=>{e.stopPropagation();setOwnerPickerOpen(o=>!o);}) : undefined}
             style={{fontSize:13,position:'relative',lineHeight:1,transition:'transform .2s',transform:hovered?'scale(1.15)':'scale(1)',cursor:onOwnerChange?'pointer':'default'}}
@@ -867,15 +826,17 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reordera
           <span style={{
             fontSize: node.title.length>8 ? 10 : 11,
             fontWeight:500,
-            color: hovered ? oc.accent : '#3D3830',
+            color: hovered ? oc.accent : (isSubitemDone ? oc.accent : '#3D3830'),
             textAlign:'center',lineHeight:1.4,
             padding:'0 7px',position:'relative',
+            textDecoration: isSubitemDone ? 'line-through' : 'none',
             transition:'color .18s',
           }}>
             {node.title}
           </span>
 
-          {/* Counts + progress % */}
+
+          {/* Counts + progress % (Project / Action layers only) */}
           {(node._projCount!==undefined || node._actCount!==undefined) && (
             <span style={{fontSize:8,color:hovered?oc.accent:'#A09688',position:'relative',textAlign:'center',lineHeight:1.6,transition:'color .18s'}}>
               {node._projCount!==undefined && <span>{node._projCount}P</span>}
@@ -888,38 +849,7 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reordera
               )}
             </span>
           )}
-          {hasSubitems && (
-            <span style={{fontSize:8,color:subitemsDone===subitems.length?'#5BA37B':(hovered?oc.accent:'#A09688'),position:'relative',textAlign:'center',lineHeight:1.6,transition:'color .18s'}}>
-              ☑ {subitemsDone}/{subitems.length}
-            </span>
-          )}
         </div>
-
-        {/* Subitems checklist popover — Action layer only, shown when the node has any */}
-        {subitemsOpen && hasSubitems && (
-          <div ref={subitemsRef} onClick={e=>e.stopPropagation()}
-            style={{position:'absolute',top:'calc(100% + 8px)',left:'50%',transform:'translateX(-50%)',
-              background:'#FDFAF5',border:'1px solid #E0D9CF',borderRadius:12,padding:'8px',
-              boxShadow:'0 10px 28px rgba(45,40,35,.22)',zIndex:999,display:'flex',flexDirection:'column',gap:4,
-              minWidth:150,maxWidth:190}}>
-            {subitems.map(s=>(
-              <button key={s.id} type="button" onClick={()=>onToggleSubitem&&onToggleSubitem(s.id,!s.done)}
-                style={{display:'flex',alignItems:'center',gap:7,background:'none',border:'none',
-                  borderRadius:8,padding:'5px 6px',cursor:'pointer',fontFamily:'inherit',textAlign:'left'}}>
-                <span style={{width:14,height:14,borderRadius:4,flexShrink:0,
-                  border: s.done? 'none' : '1.5px solid #C8C0B4',
-                  background: s.done? '#5BA37B' : '#FFF',
-                  color:'#F8F6F1',fontSize:9,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                  {s.done?'✓':''}
-                </span>
-                <span style={{fontSize:11.5,color: s.done?'#5BA37B':'#3D3830',
-                  textDecoration: s.done?'line-through':'none',lineHeight:1.4}}>
-                  {s.title}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
 
         {/* Owner picker popover */}
         {ownerPickerOpen && (
@@ -927,7 +857,7 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reordera
             style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',
               background:'#FDFAF5',border:'1px solid #E0D9CF',borderRadius:12,padding:'6px',
               boxShadow:'0 8px 24px rgba(45,40,35,.25)',zIndex:999,display:'flex',flexDirection:'column',gap:2,minWidth:104}}>
-            {[{k:'apple',e:'🍎',l:'蘋果派'},{k:'pine',e:'🌲',l:'松果'},{k:'us',e:'💜',l:'我們'}].map(o=>(
+            {ownerOptions.map(o=>(
               <button key={o.k} onClick={()=>{onOwnerChange(o.k);setOwnerPickerOpen(false);}}
                 style={{display:'flex',alignItems:'center',gap:6,background:nodeOwner===o.k?'rgba(45,74,62,.08)':'none',
                   border:'none',borderRadius:7,padding:'6px 8px',fontSize:12,cursor:'pointer',fontFamily:'inherit',
@@ -965,7 +895,7 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
   },[jumpTo]);
 
   const current    = stack[stack.length-1];
-  const depthLabel = ['專案','行動'][current.depth]||'';
+  const depthLabel = ['專案','行動','細項'][current.depth]||'';
 
   const getList = useCallback((id,depth)=>{
     if(depth===0) return Array.isArray(data.projects)?data.projects:[];  // guard: flat array only
@@ -974,8 +904,8 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
   },[data]);
 
   const children = useMemo(()=>{
-    const list = getList(current.id, current.depth);
     if (current.depth===0) {
+      const list = getList(current.id, 0);
       // Projects: enrich with action count + done count
       return list.map(proj=>{
         const acts   = data.actions[proj.id]||[];
@@ -983,10 +913,18 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
         return {...proj, _actCount:acts.length, _actDone:actDone, _owner:proj.owner||'us'};
       });
     }
-    // depth 1: actions — just return as-is with owner hint
-    return list.map(a=>({...a, _owner:a.assignee||'us'}));
+    if (current.depth===1) {
+      // depth 1: actions — just return as-is with owner hint
+      const list = getList(current.id, 1);
+      return list.map(a=>({...a, _owner:a.assignee||'us'}));
+    }
+    // depth 2: subitems (petals) of a specific action — found via current.parentId (project) + current.id (action)
+    const actions = data.actions[current.parentId] || [];
+    const action  = actions.find(a=>a.id===current.id);
+    return (action && Array.isArray(action.subitems)) ? action.subitems.filter(s=>s && typeof s.title==='string') : [];
   },[getList, current, data]);
-  const slots = [...children,...Array(Math.max(0,8-children.length)).fill(null)].slice(0,9);
+  const maxSlots = current.depth===2 ? 4 : 8;
+  const slots = [...children,...Array(Math.max(0,maxSlots-children.length)).fill(null)].slice(0, current.depth===2?4:9);
   const positions = orbitPositions(slots.length);
 
   const navigate = useCallback((ns)=>{ if(animating) return; setAnimating(true); setPhase('exit'); setPending(ns); },[animating]);
@@ -995,7 +933,15 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
     if(phase==='enter'){ const t=setTimeout(()=>{ setPhase('idle'); setAnimating(false); setPending(null); },420); return()=>clearTimeout(t); }
   },[phase,pendingStack]);
 
-  const zoomIn = useCallback((node)=>{ if(current.depth>=1) return; navigate([...stack,{id:node.id,title:node.title,depth:current.depth+1}]); },[stack,current,navigate]);
+  // depth 0 → 1: zoom into a Project to see its Actions. depth 1 → 2: zoom into an Action to see its Subitem petals.
+  // depth 2 is the leaf layer — subitem petals don't zoom further (clicking them toggles done instead).
+  const zoomIn = useCallback((node)=>{
+    if(current.depth>=2) return;
+    const nextDepth = current.depth+1;
+    const entry = {id:node.id, title:node.title, depth:nextDepth};
+    if (nextDepth===2) entry.parentId = current.id; // remember the parent Project id for the Subitem layer
+    navigate([...stack, entry]);
+  },[stack,current,navigate]);
   const zoomTo = useCallback((idx)=>{ if(idx===stack.length-1) return; navigate(stack.slice(0,idx+1)); },[stack,navigate]);
 
   const updateNode = useCallback((layer,parentId,updated)=>{
@@ -1004,30 +950,48 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
       if(layer==='dream')    return{...d,dream:stamped};
       if(layer==='projects') return{...d,projects:(d.projects||[]).map(n=>n.id===stamped.id?stamped:n)};
       if(layer==='actions')  return{...d,actions:{...d.actions,[parentId]:(d.actions[parentId]||[]).map(n=>n.id===stamped.id?stamped:n)}};
+      if(layer==='subitems') {
+        const projectId = current.parentId, actionId = parentId;
+        return {...d, actions:{...d.actions, [projectId]: (d.actions[projectId]||[]).map(a=>a.id===actionId
+          ? {...a, subitems:(a.subitems||[]).map(s=>s.id===stamped.id?stamped:s), _updatedAt:Date.now()}
+          : a)}};
+      }
       return d;
     });
     setStack(s=>s.map(item=>item.id===stamped.id?{...item,title:stamped.title}:item));
-  },[setData]);
+  },[setData,current]);
 
   const deleteNode = useCallback((layer,parentId,id)=>{
     markDeletedForSync(id);
     setData(d=>{
       if(layer==='projects') return{...d,projects:(d.projects||[]).filter(n=>n.id!==id)};
       if(layer==='actions')  return{...d,actions:{...d.actions,[parentId]:(d.actions[parentId]||[]).filter(n=>n.id!==id)}};
+      if(layer==='subitems') {
+        const projectId = current.parentId, actionId = parentId;
+        return {...d, actions:{...d.actions, [projectId]: (d.actions[projectId]||[]).map(a=>a.id===actionId
+          ? {...a, subitems:(a.subitems||[]).filter(s=>s.id!==id), _updatedAt:Date.now()}
+          : a)}};
+      }
       return d;
     });
     setStack(s=>{ const i=s.findIndex(item=>item.id===id); return i>-1?s.slice(0,i):s; });
-  },[setData]);
+  },[setData,current]);
 
   const addNode = useCallback((layer,parentId)=>{
-    const n = layer==='actions' ? makeAction('新節點') : {...makeNode('新節點'),owner:'us',status:'todo'};
+    const n = layer==='actions' ? makeAction('新節點') : layer==='subitems' ? makeSubitem('新細項') : {...makeNode('新節點'),owner:'us',status:'todo'};
     setData(d=>{
       if(layer==='projects') return{...d,projects:[...(d.projects||[]),n]};
       if(layer==='actions')  return{...d,actions:{...d.actions,[parentId]:[...(d.actions[parentId]||[]),n]}};
+      if(layer==='subitems') {
+        const projectId = current.parentId, actionId = parentId;
+        return {...d, actions:{...d.actions, [projectId]: (d.actions[projectId]||[]).map(a=>a.id===actionId
+          ? {...a, subitems:[...(a.subitems||[]).filter(s=>s&&typeof s.title==='string'), n].slice(0,4), _updatedAt:Date.now()}
+          : a)}};
+      }
       return d;
     });
     setTimeout(()=>setEditTarget({node:n,layer,parentId}),50);
-  },[setData]);
+  },[setData,current]);
 
   // ── Drag & drop reordering — Life Domains (depth 0) AND Actions within a project (depth 1) ──
   const [dragIdx, setDragIdx]         = useState(null);
@@ -1055,7 +1019,8 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
   function handleDropNode(toIdx) {
     if (toIdx!==null) {
       if (current.depth===0) reorderProjects(dragIdx, toIdx);
-      else reorderActions(current.id, dragIdx, toIdx);
+      else if (current.depth===1) reorderActions(current.id, dragIdx, toIdx);
+      // depth 2 (subitem petals): no reordering — order isn't meaningful for a 4-slot checklist
     }
     setDragIdx(null); setDragOverIdx(null);
   }
@@ -1076,7 +1041,7 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
     }));
   },[setData]);
 
-  // ── Toggle a subitem's done state directly from the map at the Action level ──
+  // ── Toggle a subitem petal's done state directly from the map (Subitem/petal layer) ──
   const toggleActionSubitem = useCallback((parentProjectId, actionId, subitemId, done) => {
     setData(d => ({
       ...d,
@@ -1089,7 +1054,31 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
     }));
   },[setData]);
 
-  const currentLayer = current.depth===0?'projects':'actions';
+  // ── Change a subitem petal's owner (apple/pine only) directly from the map ──
+  const changeSubitemOwner = useCallback((parentProjectId, actionId, subitemId, newOwner) => {
+    setData(d => ({
+      ...d,
+      actions: {
+        ...d.actions,
+        [parentProjectId]: (d.actions[parentProjectId]||[]).map(a => a.id===actionId
+          ? { ...a, subitems:(a.subitems||[]).map(s=>s.id===subitemId?{...s,assignee:newOwner}:s), _updatedAt:Date.now() }
+          : a),
+      },
+    }));
+  },[setData]);
+
+  // ── Toggle whether an Action is marked as this month's featured focus (used on the Home page) ──
+  const toggleActionFeature = useCallback((parentProjectId, actionId, val) => {
+    setData(d => ({
+      ...d,
+      actions: {
+        ...d.actions,
+        [parentProjectId]: (d.actions[parentProjectId]||[]).map(a => a.id===actionId ? {...a, monthlyFocus:val, _updatedAt:Date.now()} : a),
+      },
+    }));
+  },[setData]);
+
+  const currentLayer = current.depth===0?'projects':current.depth===1?'actions':'subitems';
 
   return (
     <div style={{flex:1,position:'relative',display:'flex',flexDirection:'column',fontFamily:"'Noto Sans TC','PingFang TC',system-ui,sans-serif",overflow:'hidden',userSelect:'none'}}>
@@ -1136,17 +1125,22 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
             {stack.length>1&&<div style={{textAlign:'center',marginTop:8,fontSize:10,color:'#C0B8AE',letterSpacing:'.06em'}}>點擊返回</div>}
           </div>
           {slots.map((node,i)=>{const pos=positions[i];return(<OrbitNode key={node?node.id:'empty_'+i} node={node} pos={pos} delay={phase==='enter'?i*25:0} isPlaceholder={!node} onZoomIn={()=>node?zoomIn(node):addNode(currentLayer,current.id)} onEdit={()=>node&&setEditTarget({node,layer:currentLayer,parentId:current.id})}
-            reorderable={true} dragIndex={i}
+            reorderable={current.depth<2} dragIndex={i}
             onDragStartNode={setDragIdx} onDragOverNode={setDragOverIdx} onDropNode={handleDropNode}
             isDragOver={dragOverIdx===i && dragIdx!==i} isDragging={dragIdx===i}
-            onOwnerChange={node ? (current.depth===0 ? (o)=>changeProjectOwner(node.id,o) : (o)=>changeActionOwner(current.id,node.id,o)) : undefined}
-            subitemsEnabled={current.depth===1}
-            onToggleSubitem={node && current.depth===1 ? (subitemId,done)=>toggleActionSubitem(current.id,node.id,subitemId,done) : undefined}
+            onOwnerChange={node ? (
+              current.depth===0 ? (o)=>changeProjectOwner(node.id,o) :
+              current.depth===1 ? (o)=>changeActionOwner(current.id,node.id,o) :
+              (o)=>changeSubitemOwner(current.parentId,current.id,node.id,o)
+            ) : undefined}
+            kind={current.depth===0?'project':current.depth===1?'action':'subitem'}
+            onToggleDone={node && current.depth===2 ? (done)=>toggleActionSubitem(current.parentId,current.id,node.id,done) : undefined}
+            onToggleFeature={node && current.depth===1 ? (val)=>toggleActionFeature(current.id,node.id,val) : undefined}
           />);})}
         </div>
       </div>
 
-      {phase==='idle'&&<div style={{textAlign:'center',padding:'0 0 16px',fontSize:11,color:'#C8C0B4',letterSpacing:'.08em',flexShrink:0}}>點擊節點展開 · 點右上角 ✎ 編輯 · 拖曳 ⠿ 排序 · 點選圖示可直接切換負責人</div>}
+      {phase==='idle'&&<div style={{textAlign:'center',padding:'0 0 16px',fontSize:11,color:'#C8C0B4',letterSpacing:'.08em',flexShrink:0}}>{current.depth===2?'點擊花瓣標示完成 · 點右上角 ✎ 編輯':'點擊節點展開 · 點右上角 ✎ 編輯 · 拖曳 ⠿ 排序 · 點選圖示可直接切換負責人'}</div>}
 
       {editTarget&&(
         <EditDialog node={editTarget.node} layer={editTarget.layer} onSave={u=>updateNode(editTarget.layer,editTarget.parentId,u)} onDelete={id=>deleteNode(editTarget.layer,editTarget.parentId,id)} onClose={()=>setEditTarget(null)} support={support} onSupportChange={onSupportChange} />
@@ -1178,11 +1172,34 @@ function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage, on
     return r;
   },[demData]);
 
-  const weekCounts = {
-    todo:  allActions.filter(a=>a.status==='todo').length,
-    doing: allActions.filter(a=>a.status==='doing').length,
-    done:  allActions.filter(a=>a.status==='done').length,
-  };
+  // 本月執行專案：已勾選「本月執行重點」的行動 + 已填寫內容的細項，依完成狀態分兩組
+  const monthlyItems = useMemo(()=>{
+    const items = [];
+    (demData.projects||[]).forEach(proj=>{
+      (demData.actions[proj.id]||[]).forEach(a=>{
+        if (a.monthlyFocus) {
+          items.push({
+            id:'action_'+a.id, kind:'action', title:a.title, done:a.status==='done',
+            projectTitle:proj.title, actionTitle:null,
+            ownerEmoji: a.assignee==='apple'?'🍎':a.assignee==='pine'?'🌲':'🤝',
+          });
+        }
+        (a.subitems||[]).forEach(s=>{
+          if (s && s.title && s.title.trim()) {
+            items.push({
+              id:'sub_'+s.id, kind:'subitem', title:s.title.trim(), done:!!s.done,
+              projectTitle:proj.title, actionTitle:a.title,
+              ownerEmoji: s.assignee==='pine'?'🌲':'🍎',
+            });
+          }
+        });
+      });
+    });
+    return items;
+  },[demData]);
+  const monthlyTodo = monthlyItems.filter(i=>!i.done);
+  const monthlyDone = monthlyItems.filter(i=>i.done);
+
   const recentDone = allActions.filter(a=>a.status==='done').sort((a,b)=>(b.completedAt||'').localeCompare(a.completedAt||'')).slice(0,3);
 
   // Domain cards grouped by owner
@@ -1242,22 +1259,49 @@ function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage, on
           </div>
         </div>
 
-        {/* ── 本週共同待辦 ── */}
+        {/* ── 本月執行專案 ── */}
         <div style={{marginBottom:18}}>
-          <SectionHeader emoji="🟨" label="本週共同待辦" action={<button onClick={()=>setPage('projects')} style={{fontSize:10,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>看板 →</button>} />
-          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
+          <SectionHeader emoji="🟨" label="本月執行專案" action={<button onClick={()=>setPage('dream')} style={{fontSize:10,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>夢想 →</button>} />
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             {[
-              {label:'待開始',count:weekCounts.todo,  color:'#A09688'},
-              {label:'進行中',count:weekCounts.doing, color:'#C07040'},
-              {label:'已完成',count:weekCounts.done,  color:'#2D4A3E'},
-            ].map(s=>(
-              <button key={s.label} onClick={()=>setPage('projects')} className="card"
-                style={{padding:'11px 12px',textAlign:'left',border:'none',cursor:'pointer',background:'rgba(255,255,255,.85)'}}>
-                <p style={{fontSize:18,fontWeight:600,color:s.color,fontFamily:"'Noto Serif TC',serif"}}>{s.count}</p>
-                <p style={{fontSize:10,color:'#A09688',marginTop:2}}>{s.label}</p>
-              </button>
+              {label:'未完成', items:monthlyTodo, color:'#C07040'},
+              {label:'已完成', items:monthlyDone, color:'#2D4A3E'},
+            ].map(col=>(
+              <div key={col.label} className="card" style={{padding:'11px 12px',background:'rgba(255,255,255,.85)'}}>
+                <p style={{fontSize:11,fontWeight:500,color:col.color,marginBottom:7}}>{col.label} · {col.items.length}</p>
+                {col.items.length===0 ? (
+                  <p style={{fontSize:10,color:'#C0B8AE',lineHeight:1.6}}>尚無{col.label}項目</p>
+                ) : (
+                  <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                    {col.items.slice(0,6).map(it=>(
+                      <button key={it.id} onClick={()=>setPage('dream')}
+                        style={{display:'flex',alignItems:'flex-start',gap:5,background:'none',border:'none',cursor:'pointer',
+                          textAlign:'left',padding:0,fontFamily:'inherit'}}>
+                        <span style={{fontSize:10,flexShrink:0,marginTop:1}}>{it.kind==='action'?'📌':'▫️'}</span>
+                        <span style={{flex:1,minWidth:0}}>
+                          <span style={{display:'block',fontSize:11,color: it.done?'#A09688':'#2D2820',
+                            textDecoration: it.done?'line-through':'none',
+                            overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.title}</span>
+                          <span style={{display:'block',fontSize:9,color:'#C0B8AE',marginTop:1,
+                            overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                            {it.ownerEmoji} {it.projectTitle}{it.actionTitle?` › ${it.actionTitle}`:''}
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                    {col.items.length>6 && (
+                      <p style={{fontSize:9,color:'#C0B8AE'}}>還有 {col.items.length-6} 項…</p>
+                    )}
+                  </div>
+                )}
+              </div>
             ))}
           </div>
+          {monthlyItems.length===0 && (
+            <p style={{fontSize:10,color:'#C0B8AE',marginTop:8,lineHeight:1.6}}>
+              到「夢想」的行動節點點 ☆ 標記本月執行重點，或幫行動加上細項，這裡就會出現提醒。
+            </p>
+          )}
         </div>
 
         {/* ── 未來 30 天重要事件 ── */}
