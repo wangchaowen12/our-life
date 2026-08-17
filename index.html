@@ -188,7 +188,12 @@ function makeNode(title, desc='') {
 }
 function makeAction(title) {
   return { id:uid(), title, desc:'', image:null, updates:[], status:'todo', assignee:'us', dueDate:null, completedAt:null,
-    recurType:'once', recurFreq:'weekly', recurCustomDays:7, _updatedAt: Date.now() };
+    recurType:'once', recurFreq:'weekly', recurCustomDays:7, subitems:[], _updatedAt: Date.now() };
+}
+/* ── Action subitems (checklist under an Action, max 4) ──
+   Each subitem: { id, title, done }. Free-form, user-created; an Action may have 0–4. */
+function makeSubitem(title='') {
+  return { id:uid(), title, done:false };
 }
 /* ── Recurring Action helpers ──
    recurType: 'once' | 'recurring'
@@ -525,7 +530,14 @@ function EditDialog({ node, layer, onSave, onDelete, onClose, support, onSupport
   const [updateText, setUpdateText] = useState('');
   const [neededText, setNeededText] = useState('');
   const [receivedText, setReceivedText] = useState('');
-  const [tab, setTab] = useState('basic'); // basic | updates | support
+  const [tab, setTab] = useState('basic'); // basic | updates | support | subitems (actions only)
+  // Subitems (Action layer only): up to 4 user-defined checklist items under an Action.
+  // Existing ones are edited as-is; a fresh Action with none starts with 4 blank rows to fill in.
+  const [subitems, setSubitems] = useState(() => {
+    if (layer!=='actions') return node.subitems||[];
+    const existing = (node.subitems||[]).filter(s=>s && typeof s.title==='string').slice(0,4);
+    return existing.length===0 ? [0,1,2,3].map(()=>makeSubitem('')) : existing;
+  });
   const titleRef = useRef();
   const sup = support[node.id] || { needed:[], received:[] };
 
@@ -533,11 +545,23 @@ function EditDialog({ node, layer, onSave, onDelete, onClose, support, onSupport
 
   function handleSave() {
     if (!title.trim()) return;
-    onSave({ ...node, title:title.trim(), desc:desc.trim(), image, updates, owner, assignee: node.assignee!==undefined ? owner : undefined });
+    const cleanSubitems = layer==='actions'
+      ? subitems.filter(s=>s && s.title && s.title.trim()).slice(0,4).map(s=>({...s,title:s.title.trim()}))
+      : node.subitems;
+    onSave({ ...node, title:title.trim(), desc:desc.trim(), image, updates, owner, assignee: node.assignee!==undefined ? owner : undefined, subitems:cleanSubitems });
     onClose();
   }
   function handleDelete() {
     if (window.confirm(`確定要刪除「${node.title}」嗎？`)) { onDelete(node.id); onClose(); }
+  }
+  function updateSubitem(id, updates) {
+    setSubitems(list => list.map(s => s.id===id ? {...s,...updates} : s));
+  }
+  function removeSubitem(id) {
+    setSubitems(list => list.filter(s => s.id!==id));
+  }
+  function addSubitem() {
+    setSubitems(list => list.length>=4 ? list : [...list, makeSubitem('')]);
   }
   function addUpdate() {
     if (!updateText.trim()) return;
@@ -570,6 +594,7 @@ function EditDialog({ node, layer, onSave, onDelete, onClose, support, onSupport
         <div style={{display:'flex',gap:4,padding:'14px 16px 0',borderBottom:'1px solid #EDE8E0',flexShrink:0}}>
           <button style={tabStyle('basic')} onClick={()=>setTab('basic')}>基本</button>
           <button style={tabStyle('image')} onClick={()=>setTab('image')}>圖片</button>
+          {layer==='actions' && <button style={tabStyle('subitems')} onClick={()=>setTab('subitems')}>細項 {subitems.filter(s=>s.title&&s.title.trim()).length>0?`(${subitems.filter(s=>s.title&&s.title.trim()).length})`:''}</button>}
           <button style={tabStyle('updates')} onClick={()=>setTab('updates')}>更新 {updates.length>0?`(${updates.length})`:''}</button>
           <button style={tabStyle('support')} onClick={()=>setTab('support')}>支持</button>
         </div>
@@ -606,6 +631,39 @@ function EditDialog({ node, layer, onSave, onDelete, onClose, support, onSupport
             <div style={{display:'flex',flexDirection:'column',gap:10}}>
               <p style={{fontSize:12,color:'#A09688'}}>上傳一張代表這個節點的照片或願景圖</p>
               <ImageUploadField value={image} onChange={setImage} />
+            </div>
+          )}
+          {tab==='subitems' && layer==='actions' && (
+            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              <p style={{fontSize:12,color:'#A09688',lineHeight:1.6}}>最多 4 個細項，可自訂內容；點擊左側方塊可標示完成，不需要全部填滿。</p>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                {subitems.map(s=>(
+                  <div key={s.id} style={{display:'flex',alignItems:'center',gap:8}}>
+                    <button type="button" onClick={()=>updateSubitem(s.id,{done:!s.done})}
+                      title={s.done?'標示未完成':'標示完成'}
+                      style={{width:19,height:19,borderRadius:5,flexShrink:0,cursor:'pointer',
+                        border: s.done? 'none' : '1.5px solid #C8C0B4',
+                        background: s.done? '#5BA37B' : '#FFF',
+                        color:'#F8F6F1',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      {s.done?'✓':''}
+                    </button>
+                    <input value={s.title} onChange={e=>updateSubitem(s.id,{title:e.target.value})}
+                      placeholder="細項名稱…"
+                      style={{flex:1,fontSize:13,padding:'8px 10px',borderRadius:9,border:'1.5px solid #E0D9CF',
+                        background: s.done? 'rgba(91,163,123,.08)' : '#FFF',
+                        color: s.done? '#5BA37B' : '#3D3830',
+                        textDecoration: s.done? 'line-through' : 'none',fontFamily:'inherit'}} />
+                    <button type="button" onClick={()=>removeSubitem(s.id)} title="刪除細項"
+                      style={{background:'none',border:'none',fontSize:15,color:'#C8C0B4',cursor:'pointer',flexShrink:0}}>×</button>
+                  </div>
+                ))}
+                {subitems.length<4 && (
+                  <button type="button" onClick={addSubitem}
+                    style={{alignSelf:'flex-start',background:'none',border:'1.5px dashed #D8D0C4',borderRadius:9,padding:'6px 12px',fontSize:12,color:'#A09688',cursor:'pointer',marginTop:2,fontFamily:'inherit'}}>
+                    ＋ 新增細項
+                  </button>
+                )}
+              </div>
             </div>
           )}
           {tab==='updates' && (
@@ -668,10 +726,12 @@ function EditDialog({ node, layer, onSave, onDelete, onClose, support, onSupport
 /* ════════════════════════════════════════════════════════
    DEM — OrbitNode
 ════════════════════════════════════════════════════════ */
-function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reorderable, onOwnerChange, dragIndex, onDragStartNode, onDragOverNode, onDropNode, isDragOver, isDragging }) {
+function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reorderable, onOwnerChange, dragIndex, onDragStartNode, onDragOverNode, onDropNode, isDragOver, isDragging, subitemsEnabled, onToggleSubitem }) {
   const [hovered, setHovered] = useState(false);
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false);
+  const [subitemsOpen, setSubitemsOpen] = useState(false);
   const pickerRef = useRef(null);
+  const subitemsRef = useRef(null);
 
   // Close the owner picker when clicking anywhere outside it
   useEffect(() => {
@@ -687,6 +747,20 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reordera
     };
   }, [ownerPickerOpen]);
 
+  // Close the subitems checklist popover when clicking anywhere outside it
+  useEffect(() => {
+    if (!subitemsOpen) return;
+    function handleOutside(e) {
+      if (subitemsRef.current && !subitemsRef.current.contains(e.target)) setSubitemsOpen(false);
+    }
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+    };
+  }, [subitemsOpen]);
+
   const OC = {
     apple:{ border:'rgba(232,149,109,.55)', bg:'rgba(232,149,109,.09)', accent:'#E8956D', glow:'rgba(232,149,109,.22)' },
     pine: { border:'rgba(45,74,62,.5)',     bg:'rgba(45,74,62,.08)',    accent:'#2D4A3E', glow:'rgba(45,74,62,.20)'    },
@@ -698,6 +772,9 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reordera
   const OUTER = 118, INNER = 104, r = (OUTER - 8) / 2;
   const circ  = 2 * Math.PI * r;
   const ownerEmoji = nodeOwner==='apple'?'🍎':nodeOwner==='pine'?'🌲':'🤝';
+  const subitems = (subitemsEnabled && node && node.subitems) ? node.subitems.filter(s=>s && s.title && s.title.trim()) : [];
+  const hasSubitems = subitems.length>0;
+  const subitemsDone = subitems.filter(s=>s.done).length;
 
   if (isPlaceholder) {
     return (
@@ -755,7 +832,7 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reordera
         )}
 
         {/* Main circle */}
-        <div onClick={onZoomIn}
+        <div onClick={hasSubitems ? (e=>{e.stopPropagation();setSubitemsOpen(o=>!o);}) : onZoomIn}
           style={{
             position:'absolute', top:(OUTER-INNER)/2, left:(OUTER-INNER)/2,
             width:INNER, height:INNER, borderRadius:'50%',
@@ -811,7 +888,38 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reordera
               )}
             </span>
           )}
+          {hasSubitems && (
+            <span style={{fontSize:8,color:subitemsDone===subitems.length?'#5BA37B':(hovered?oc.accent:'#A09688'),position:'relative',textAlign:'center',lineHeight:1.6,transition:'color .18s'}}>
+              ☑ {subitemsDone}/{subitems.length}
+            </span>
+          )}
         </div>
+
+        {/* Subitems checklist popover — Action layer only, shown when the node has any */}
+        {subitemsOpen && hasSubitems && (
+          <div ref={subitemsRef} onClick={e=>e.stopPropagation()}
+            style={{position:'absolute',top:'calc(100% + 8px)',left:'50%',transform:'translateX(-50%)',
+              background:'#FDFAF5',border:'1px solid #E0D9CF',borderRadius:12,padding:'8px',
+              boxShadow:'0 10px 28px rgba(45,40,35,.22)',zIndex:999,display:'flex',flexDirection:'column',gap:4,
+              minWidth:150,maxWidth:190}}>
+            {subitems.map(s=>(
+              <button key={s.id} type="button" onClick={()=>onToggleSubitem&&onToggleSubitem(s.id,!s.done)}
+                style={{display:'flex',alignItems:'center',gap:7,background:'none',border:'none',
+                  borderRadius:8,padding:'5px 6px',cursor:'pointer',fontFamily:'inherit',textAlign:'left'}}>
+                <span style={{width:14,height:14,borderRadius:4,flexShrink:0,
+                  border: s.done? 'none' : '1.5px solid #C8C0B4',
+                  background: s.done? '#5BA37B' : '#FFF',
+                  color:'#F8F6F1',fontSize:9,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                  {s.done?'✓':''}
+                </span>
+                <span style={{fontSize:11.5,color: s.done?'#5BA37B':'#3D3830',
+                  textDecoration: s.done?'line-through':'none',lineHeight:1.4}}>
+                  {s.title}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Owner picker popover */}
         {ownerPickerOpen && (
@@ -968,6 +1076,19 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
     }));
   },[setData]);
 
+  // ── Toggle a subitem's done state directly from the map at the Action level ──
+  const toggleActionSubitem = useCallback((parentProjectId, actionId, subitemId, done) => {
+    setData(d => ({
+      ...d,
+      actions: {
+        ...d.actions,
+        [parentProjectId]: (d.actions[parentProjectId]||[]).map(a => a.id===actionId
+          ? { ...a, subitems:(a.subitems||[]).map(s=>s.id===subitemId?{...s,done}:s), _updatedAt:Date.now() }
+          : a),
+      },
+    }));
+  },[setData]);
+
   const currentLayer = current.depth===0?'projects':'actions';
 
   return (
@@ -1019,6 +1140,8 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
             onDragStartNode={setDragIdx} onDragOverNode={setDragOverIdx} onDropNode={handleDropNode}
             isDragOver={dragOverIdx===i && dragIdx!==i} isDragging={dragIdx===i}
             onOwnerChange={node ? (current.depth===0 ? (o)=>changeProjectOwner(node.id,o) : (o)=>changeActionOwner(current.id,node.id,o)) : undefined}
+            subitemsEnabled={current.depth===1}
+            onToggleSubitem={node && current.depth===1 ? (subitemId,done)=>toggleActionSubitem(current.id,node.id,subitemId,done) : undefined}
           />);})}
         </div>
       </div>
@@ -1657,6 +1780,8 @@ function ProjectDetailModal({ project, demData, setDemData, onClose }) {
               <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'rgba(255,255,255,.6)',borderRadius:8,border:'1px solid rgba(180,172,160,.25)'}}>
                 <button onClick={()=>toggleAction(a.id)} style={{width:15,height:15,borderRadius:3,border:'1.5px solid #C8C0B4',background:'none',cursor:'pointer',flexShrink:0}}></button>
                 <span style={{flex:1,fontSize:12,color:'#2D2820'}}>{a.recurType==='recurring'&&'🔁 '}{a.title}</span>
+                {a.subitems&&a.subitems.length>0 &&
+                  <span style={{fontSize:9,color:'#A09688',flexShrink:0}}>☑ {a.subitems.filter(s=>s.done).length}/{a.subitems.length}</span>}
                 <button onClick={()=>setEditingAction(a)} title="編輯 / 設定循環" style={{background:'none',border:'none',fontSize:12,color:'#C8C0B4',cursor:'pointer'}}>⚙</button>
                 <button onClick={()=>deleteAction(a.id)} style={{background:'none',border:'none',fontSize:12,color:'#C8C0B4',cursor:'pointer'}}>×</button>
               </div>
@@ -1669,6 +1794,8 @@ function ProjectDetailModal({ project, demData, setDemData, onClose }) {
                 <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'rgba(45,74,62,.04)',borderRadius:8}}>
                   <button onClick={()=>toggleAction(a.id)} style={{width:15,height:15,borderRadius:3,border:'none',background:'#2D4A3E',cursor:'pointer',flexShrink:0,color:'#F8F6F1',fontSize:9,display:'flex',alignItems:'center',justifyContent:'center'}}>✓</button>
                   <span style={{flex:1,fontSize:12,color:'#A09688',textDecoration:'line-through'}}>{a.recurType==='recurring'&&'🔁 '}{a.title}</span>
+                  {a.subitems&&a.subitems.length>0 &&
+                    <span style={{fontSize:9,color:'#A09688',flexShrink:0}}>☑ {a.subitems.filter(s=>s.done).length}/{a.subitems.length}</span>}
                   {a.recurType==='recurring' && a.recurNextDate &&
                     <span style={{fontSize:9,color:'#5BA37B',flexShrink:0}}>下次 {a.recurNextDate.slice(5).replace('-','/')}</span>}
                   <button onClick={()=>setEditingAction(a)} title="編輯 / 設定循環" style={{background:'none',border:'none',fontSize:12,color:'#C8C0B4',cursor:'pointer'}}>⚙</button>
@@ -1820,6 +1947,8 @@ function updateActionInDem(setDemData, projectId, actionId, updates) {
 /* ── Action Card ── */
 function ActionCard({ action, onOpen, dragging, onDragStart, onDragEnd }) {
   const ownerEmoji = action.assignee==='apple'?'🍎':action.assignee==='pine'?'🌲':'🤝';
+  const subitems = action.subitems||[];
+  const subDone = subitems.filter(s=>s.done).length;
   return (
     <div
       draggable
@@ -1851,6 +1980,8 @@ function ActionCard({ action, onOpen, dragging, onDragStart, onDragEnd }) {
         {action.dueDate&&<span style={{fontSize:9,color:'#A09688'}}>📅 {action.dueDate.slice(5).replace('-','/')}</span>}
         {action.status==='done' && action.recurType==='recurring' && action.recurNextDate &&
           <span style={{fontSize:9,color:'#5BA37B'}}>🔁 下次 {action.recurNextDate.slice(5).replace('-','/')}</span>}
+        {subitems.length>0 &&
+          <span style={{fontSize:9,color: subDone===subitems.length?'#5BA37B':'#A09688'}}>☑ {subDone}/{subitems.length}</span>}
       </div>
     </div>
   );
@@ -1858,6 +1989,13 @@ function ActionCard({ action, onOpen, dragging, onDragStart, onDragEnd }) {
 
 /* ── Action Edit Modal ── */
 function ActionEditModal({ action, onSave, onClose }) {
+  // Subitems: if the action already has some, edit those (up to 4). If it has none yet,
+  // start with 4 blank rows ready to fill in — but blanks are never forced/saved.
+  const initSubitems = () => {
+    const existing = (action.subitems||[]).filter(s=>s && typeof s.title==='string').slice(0,4);
+    if (existing.length===0) return [0,1,2,3].map(()=>makeSubitem(''));
+    return existing;
+  };
   const [form, setForm] = useState({
     title:     action.title,
     desc:      action.desc||'',
@@ -1867,11 +2005,25 @@ function ActionEditModal({ action, onSave, onClose }) {
     recurType: action.recurType||'once',
     recurFreq: action.recurFreq||'weekly',
     recurCustomDays: action.recurCustomDays||7,
+    subitems:  initSubitems(),
   });
   function save() {
     if (!form.title.trim()) return;
-    onSave({ ...action, ...form, title:form.title.trim() });
+    const cleanSubitems = form.subitems
+      .filter(s=>s && s.title && s.title.trim())
+      .slice(0,4)
+      .map(s=>({ ...s, title:s.title.trim() }));
+    onSave({ ...action, ...form, title:form.title.trim(), subitems:cleanSubitems });
     onClose();
+  }
+  function updateSubitem(id, updates) {
+    setForm(f => ({ ...f, subitems: f.subitems.map(s => s.id===id ? {...s,...updates} : s) }));
+  }
+  function removeSubitem(id) {
+    setForm(f => ({ ...f, subitems: f.subitems.filter(s => s.id!==id) }));
+  }
+  function addSubitem() {
+    setForm(f => f.subitems.length>=4 ? f : { ...f, subitems: [...f.subitems, makeSubitem('')] });
   }
   const isRecurring = form.recurType==='recurring';
   return (
@@ -1900,6 +2052,39 @@ function ActionEditModal({ action, onSave, onClose }) {
             <option value="doing">進行中</option>
             <option value="done">已完成</option>
           </select>
+
+          {/* Subitems checklist (max 4, user-defined) */}
+          <div style={{borderTop:'1px solid #EDE8E0',paddingTop:9,marginTop:2}}>
+            <p style={{fontSize:10,color:'#A09688',marginBottom:6,letterSpacing:'.06em',textTransform:'uppercase'}}>細項（最多 4 個，選填）</p>
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              {form.subitems.map(s=>(
+                <div key={s.id} style={{display:'flex',alignItems:'center',gap:7}}>
+                  <button type="button" onClick={()=>updateSubitem(s.id,{done:!s.done})}
+                    title={s.done?'標示未完成':'標示完成'}
+                    style={{width:17,height:17,borderRadius:4,flexShrink:0,cursor:'pointer',
+                      border: s.done? 'none' : '1.5px solid #C8C0B4',
+                      background: s.done? '#5BA37B' : '#FFF',
+                      color:'#F8F6F1',fontSize:10,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                    {s.done?'✓':''}
+                  </button>
+                  <input value={s.title} onChange={e=>updateSubitem(s.id,{title:e.target.value})}
+                    placeholder="細項名稱…"
+                    style={{flex:1,fontSize:12,padding:'5px 8px',borderRadius:7,border:'1px solid #E0D9CF',
+                      background: s.done? 'rgba(91,163,123,.08)' : '#FFF',
+                      color: s.done? '#5BA37B' : '#2D2820',
+                      textDecoration: s.done? 'line-through' : 'none'}} />
+                  <button type="button" onClick={()=>removeSubitem(s.id)} title="刪除細項"
+                    style={{background:'none',border:'none',fontSize:13,color:'#C8C0B4',cursor:'pointer',flexShrink:0}}>×</button>
+                </div>
+              ))}
+              {form.subitems.length<4 && (
+                <button type="button" onClick={addSubitem}
+                  style={{alignSelf:'flex-start',background:'none',border:'1.5px dashed #D8D0C4',borderRadius:7,padding:'4px 10px',fontSize:11,color:'#A09688',cursor:'pointer',marginTop:2}}>
+                  ＋ 新增細項
+                </button>
+              )}
+            </div>
+          </div>
 
           {/* Recurring action settings */}
           <div style={{borderTop:'1px solid #EDE8E0',paddingTop:9,marginTop:2}}>
