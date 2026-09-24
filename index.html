@@ -142,7 +142,6 @@ const PAGES = [
   { key:'home',      label:'首頁',  icon:'🏠' },
   { key:'dream',     label:'夢想',  icon:'✦'  },
   { key:'calendar',  label:'月曆',  icon:'📅' },
-  { key:'projects',  label:'專案',  icon:'◎'  },
   { key:'memories',  label:'回憶',  icon:'📸' },
   { key:'review',    label:'回顧',  icon:'📖' },
 ];
@@ -188,13 +187,14 @@ function makeNode(title, desc='') {
 }
 function makeAction(title) {
   return { id:uid(), title, desc:'', image:null, updates:[], status:'todo', assignee:'us', dueDate:null, completedAt:null,
-    recurType:'once', recurFreq:'weekly', recurCustomDays:7, subitems:[], monthlyFocus:false, _updatedAt: Date.now() };
+    recurType:'once', recurFreq:'weekly', recurCustomDays:7, subitems:[], _updatedAt: Date.now() };
 }
 /* ── Action subitems (checklist under an Action, max 4) ──
-   Each subitem: { id, title, done, assignee }. Free-form, user-created; an Action may have 0–4.
-   assignee is 'apple' or 'pine' only (no shared "us" option at this level). */
+   Each subitem: { id, title, done, assignee, monthlyFocus }. Free-form, user-created; an Action may have 0–4.
+   assignee is 'apple' or 'pine' only (no shared "us" option at this level).
+   monthlyFocus: whether this subitem is starred as this month's focus (drives the Home page's 本月執行專案). */
 function makeSubitem(title='') {
-  return { id:uid(), title, done:false, assignee:'apple' };
+  return { id:uid(), title, done:false, assignee:'apple', monthlyFocus:false };
 }
 /* ── Recurring Action helpers ──
    recurType: 'once' | 'recurring'
@@ -705,10 +705,13 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reordera
   };
   const isSubitem     = kind==='subitem';
   const isAction      = kind==='action';
+  const isProject     = kind==='project';
   const isSubitemDone = isSubitem && !!node?.done;
-  const isFeatured    = isAction && !!node?.monthlyFocus;
+  const isProjectDone = isProject && node?.status==='done';
+  const isDoneVisual  = isSubitemDone || isProjectDone;
+  const isFeatured    = isSubitem && !!node?.monthlyFocus;
   const nodeOwner = node?._owner || node?.owner || node?.assignee || 'us';
-  const oc  = isSubitemDone ? OC.done : (OC[nodeOwner] || OC.us);
+  const oc  = isDoneVisual ? OC.done : (OC[nodeOwner] || OC.us);
   const pct = (node?._actCount > 0) ? Math.round((node?._actDone||0) / node._actCount * 100) : null;
   const OUTER = 118, INNER = 104, r = (OUTER - 8) / 2;
   const circ  = 2 * Math.PI * r;
@@ -776,8 +779,8 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reordera
           </div>
         )}
 
-        {/* 本月執行重點 star toggle — Action layer only */}
-        {isAction && (
+        {/* 本月執行重點 star toggle — Subitem layer only */}
+        {isSubitem && (
           <div onClick={e=>{e.stopPropagation();onToggleFeature&&onToggleFeature(!node.monthlyFocus);}}
             title={isFeatured?'取消本月執行重點':'設為本月執行重點'}
             style={{position:'absolute',bottom:4,left:'50%',transform:'translateX(-50%)',width:22,height:22,borderRadius:'50%',
@@ -789,13 +792,26 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reordera
           </div>
         )}
 
+        {/* 專案達標 toggle — Project layer only */}
+        {isProject && (
+          <div onClick={e=>{e.stopPropagation();onToggleAchieved&&onToggleAchieved(!isProjectDone);}}
+            title={isProjectDone?'取消達標':'標記為已達標'}
+            style={{position:'absolute',bottom:4,left:'50%',transform:'translateX(-50%)',width:22,height:22,borderRadius:'50%',
+              background: isProjectDone ? '#5BA37B' : (hovered?'rgba(45,40,35,.12)':'transparent'),
+              display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',
+              opacity: isProjectDone||hovered?1:0, transition:'all .15s',zIndex:3,fontSize:11,
+              color: isProjectDone?'#FFF':'#A09688'}}>
+            {isProjectDone?'✓':'○'}
+          </div>
+        )}
+
         {/* Main circle */}
         <div onClick={mainClick} title={isSubitem?(node.done?'點擊標示未完成':'點擊標示完成'):undefined}
           style={{
             position:'absolute', top:(OUTER-INNER)/2, left:(OUTER-INNER)/2,
             width:INNER, height:INNER, borderRadius:'50%',
             background: hovered ? 'rgba(255,255,255,.96)' : oc.bg,
-            border:`1.5px solid ${hovered ? oc.border : (isSubitemDone?oc.border:'rgba(180,172,160,.28)')}`,
+            border:`1.5px solid ${hovered ? oc.border : (isDoneVisual?oc.border:'rgba(180,172,160,.28)')}`,
             backdropFilter:'blur(10px)',
             display:'flex',alignItems:'center',justifyContent:'center',
             flexDirection:'column',gap:2,
@@ -814,7 +830,7 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reordera
           )}
 
           {/* Owner emoji — clickable to change owner (apple/pine[/us]) directly when onOwnerChange is provided.
-              Subitem petals show completion via the circle's own color + strikethrough (see above), not a separate icon. */}
+              Subitem petals & achieved Projects show completion via the circle's own color + strikethrough (see above), not a separate icon. */}
           <span
             onClick={onOwnerChange ? (e=>{e.stopPropagation();setOwnerPickerOpen(o=>!o);}) : undefined}
             style={{fontSize:13,position:'relative',lineHeight:1,transition:'transform .2s',transform:hovered?'scale(1.15)':'scale(1)',cursor:onOwnerChange?'pointer':'default'}}
@@ -826,10 +842,10 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reordera
           <span style={{
             fontSize: node.title.length>8 ? 10 : 11,
             fontWeight:500,
-            color: hovered ? oc.accent : (isSubitemDone ? oc.accent : '#3D3830'),
+            color: hovered ? oc.accent : (isDoneVisual ? oc.accent : '#3D3830'),
             textAlign:'center',lineHeight:1.4,
             padding:'0 7px',position:'relative',
-            textDecoration: isSubitemDone ? 'line-through' : 'none',
+            textDecoration: isDoneVisual ? 'line-through' : 'none',
             transition:'color .18s',
           }}>
             {node.title}
@@ -1030,6 +1046,11 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
     setData(d => ({ ...d, projects: (d.projects||[]).map(p => p.id===projectId ? {...p, owner:newOwner, _updatedAt:Date.now()} : p) }));
   },[setData]);
 
+  // ── Toggle whether a Project is marked as achieved (達標) directly from the map ──
+  const toggleProjectAchieved = useCallback((projectId, val) => {
+    setData(d => ({ ...d, projects: (d.projects||[]).map(p => p.id===projectId ? {...p, status: val?'done':'todo', _updatedAt:Date.now()} : p) }));
+  },[setData]);
+
   // ── Change owner (assignee) directly from the map at the Action level ──
   const changeActionOwner = useCallback((parentProjectId, actionId, newOwner) => {
     setData(d => ({
@@ -1067,13 +1088,15 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
     }));
   },[setData]);
 
-  // ── Toggle whether an Action is marked as this month's featured focus (used on the Home page) ──
-  const toggleActionFeature = useCallback((parentProjectId, actionId, val) => {
+  // ── Toggle whether a Subitem is marked as this month's featured focus (used on the Home page) ──
+  const toggleSubitemFeature = useCallback((parentProjectId, actionId, subitemId, val) => {
     setData(d => ({
       ...d,
       actions: {
         ...d.actions,
-        [parentProjectId]: (d.actions[parentProjectId]||[]).map(a => a.id===actionId ? {...a, monthlyFocus:val, _updatedAt:Date.now()} : a),
+        [parentProjectId]: (d.actions[parentProjectId]||[]).map(a => a.id===actionId
+          ? { ...a, subitems:(a.subitems||[]).map(s=>s.id===subitemId?{...s,monthlyFocus:val}:s), _updatedAt:Date.now() }
+          : a),
       },
     }));
   },[setData]);
@@ -1135,12 +1158,13 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) 
             ) : undefined}
             kind={current.depth===0?'project':current.depth===1?'action':'subitem'}
             onToggleDone={node && current.depth===2 ? (done)=>toggleActionSubitem(current.parentId,current.id,node.id,done) : undefined}
-            onToggleFeature={node && current.depth===1 ? (val)=>toggleActionFeature(current.id,node.id,val) : undefined}
+            onToggleFeature={node && current.depth===2 ? (val)=>toggleSubitemFeature(current.parentId,current.id,node.id,val) : undefined}
+            onToggleAchieved={node && current.depth===0 ? (val)=>toggleProjectAchieved(node.id,val) : undefined}
           />);})}
         </div>
       </div>
 
-      {phase==='idle'&&<div style={{textAlign:'center',padding:'0 0 16px',fontSize:11,color:'#C8C0B4',letterSpacing:'.08em',flexShrink:0}}>{current.depth===2?'點擊花瓣標示完成 · 點右上角 ✎ 編輯':'點擊節點展開 · 點右上角 ✎ 編輯 · 拖曳 ⠿ 排序 · 點選圖示可直接切換負責人'}</div>}
+      {phase==='idle'&&<div style={{textAlign:'center',padding:'0 0 16px',fontSize:11,color:'#C8C0B4',letterSpacing:'.08em',flexShrink:0}}>{current.depth===2?'點擊花瓣標示完成 · 點下方 ☆ 標記本月執行重點 · 點右上角 ✎ 編輯':current.depth===0?'點擊節點展開 · 點下方 ○ 標記達標 · 點右上角 ✎ 編輯 · 拖曳 ⠿ 排序 · 點選圖示可直接切換負責人':'點擊節點展開 · 點右上角 ✎ 編輯 · 拖曳 ⠿ 排序 · 點選圖示可直接切換負責人'}</div>}
 
       {editTarget&&(
         <EditDialog node={editTarget.node} layer={editTarget.layer} onSave={u=>updateNode(editTarget.layer,editTarget.parentId,u)} onDelete={id=>deleteNode(editTarget.layer,editTarget.parentId,id)} onClose={()=>setEditTarget(null)} support={support} onSupportChange={onSupportChange} />
@@ -1172,20 +1196,13 @@ function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage, on
     return r;
   },[demData]);
 
-  // 本月執行專案：已勾選「本月執行重點」的行動 + 已填寫內容的細項，依完成狀態分兩組
+  // 本月執行專案：已勾選「本月執行重點」的細項，依完成狀態分兩組
   const monthlyItems = useMemo(()=>{
     const items = [];
     (demData.projects||[]).forEach(proj=>{
       (demData.actions[proj.id]||[]).forEach(a=>{
-        if (a.monthlyFocus) {
-          items.push({
-            id:'action_'+a.id, kind:'action', title:a.title, done:a.status==='done',
-            projectTitle:proj.title, actionTitle:null,
-            ownerEmoji: a.assignee==='apple'?'🍎':a.assignee==='pine'?'🌲':'🤝',
-          });
-        }
         (a.subitems||[]).forEach(s=>{
-          if (s && s.title && s.title.trim()) {
+          if (s && s.monthlyFocus && s.title && s.title.trim()) {
             items.push({
               id:'sub_'+s.id, kind:'subitem', title:s.title.trim(), done:!!s.done,
               projectTitle:proj.title, actionTitle:a.title,
@@ -1299,7 +1316,7 @@ function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage, on
           </div>
           {monthlyItems.length===0 && (
             <p style={{fontSize:10,color:'#C0B8AE',marginTop:8,lineHeight:1.6}}>
-              到「夢想」的行動節點點 ☆ 標記本月執行重點，或幫行動加上細項，這裡就會出現提醒。
+              到「夢想」展開一個行動、進入細項層，點 ☆ 標記本月執行重點，這裡就會出現提醒。
             </p>
           )}
         </div>
@@ -1649,742 +1666,6 @@ function DayModal({ dateKey, events, setEvents, onClose }) {
   );
 }
 
-/* ════════════════════════════════════════════════════════
-   PROJECTS PAGE
-════════════════════════════════════════════════════════ */
-
-/* ════════════════════════════════════════════════════════
-   PROJECT HELPERS
-════════════════════════════════════════════════════════ */
-function getProjectStats(projectId, demData) {
-  const acts  = demData.actions[projectId] || [];
-  const total = acts.length;
-  const done  = acts.filter(a => a.status === 'done').length;
-  const next  = acts.find(a => a.status !== 'done') || null;
-  return { total, done, next };
-}
-
-function flattenProjects(demData) {
-  return (demData.projects||[]).map(p => ({
-    ...p,
-    domainId:    p.id,
-    domainTitle: p.title,
-    status:      p.status||'todo',
-    owner:       p.owner||'us',
-  }));
-}
-
-
-function updateProjectInDem(setDemData, projectId, updates) {
-  setDemData(d => ({
-    ...d,
-    projects: (d.projects||[]).map(p => p.id===projectId ? {...p,...updates,_updatedAt:Date.now()} : p),
-  }));
-}
-
-/* ════════════════════════════════════════════════════════
-   PROJECT DETAIL MODAL
-════════════════════════════════════════════════════════ */
-function ProjectDetailModal({ project, demData, setDemData, onClose }) {
-  const [form, setForm] = useState({
-    title:  project.title,
-    desc:   project.desc  || '',
-    owner:  project.owner || 'us',
-    dueDate:project.dueDate || '',
-    status: project.status || 'todo',
-  });
-  const [newAction, setNewAction] = useState('');
-  const [editingAction, setEditingAction] = useState(null);
-  const actions = demData.actions[project.id] || [];
-  const { total, done } = getProjectStats(project.id, demData);
-  const pct = total > 0 ? Math.round(done / total * 100) : 0;
-  const todoActs = actions.filter(a => a.status !== 'done');
-  const doneActs = actions.filter(a => a.status === 'done');
-
-  function save() {
-    if (!form.title.trim()) return;
-    updateProjectInDem(setDemData, project.id, {
-      title: form.title.trim(), desc: form.desc,
-      owner: form.owner, dueDate: form.dueDate, status: form.status,
-    });
-    onClose();
-  }
-  function addAction() {
-    if (!newAction.trim()) return;
-    setDemData(d => ({
-      ...d,
-      actions: { ...d.actions, [project.id]: [...(d.actions[project.id]||[]), makeAction(newAction.trim())] },
-    }));
-    setNewAction('');
-  }
-  // Full action editor (title / desc / assignee / due date / status / recurring) — same modal used on the Kanban board
-  function saveAction(updated) {
-    setDemData(d => {
-      const list = d.actions[project.id]||[];
-      const prev = list.find(a=>a.id===updated.id);
-      const becomingDone = updated.status==='done' && prev && prev.status!=='done';
-      const leavingDone   = updated.status!=='done' && prev && prev.status==='done';
-      const updatedList = list.map(a => {
-        if (a.id !== updated.id) return a;
-        const merged = { ...a, ...updated };
-        if (becomingDone) return markActionDone(merged);
-        if (leavingDone)  return markActionUndone(merged);
-        return { ...merged, _updatedAt:Date.now() };
-      });
-      return { ...d, actions: { ...d.actions, [project.id]: updatedList } };
-    });
-    setEditingAction(null);
-  }
-  function toggleAction(id) {
-    setDemData(d => {
-      const list = d.actions[project.id]||[];
-      const target = list.find(a=>a.id===id);
-      if (!target) return d;
-      const becomingDone = target.status!=='done';
-      const updatedList = list.map(a => {
-        if (a.id !== id) return a;
-        return becomingDone ? markActionDone(a) : markActionUndone(a);
-      });
-      return { ...d, actions: { ...d.actions, [project.id]: updatedList } };
-    });
-  }
-  function deleteAction(id) {
-    markDeletedForSync(id);
-    setDemData(d => ({
-      ...d,
-      actions: { ...d.actions, [project.id]: (d.actions[project.id]||[]).filter(a => a.id!==id) },
-    }));
-  }
-  function deleteProject() {
-    if (!window.confirm('確定要刪除這個專案嗎？')) return;
-    const orphanedActionIds = (demData.actions[project.id]||[]).map(a=>a.id);
-    markDeletedForSync(project.id, ...orphanedActionIds);
-    setDemData(d => {
-      const { [project.id]:_, ...restActions } = d.actions;
-      return { ...d, projects: (d.projects||[]).filter(p => p.id!==project.id), actions: restActions };
-    });
-    onClose();
-  }
-
-  return (
-    <div onClick={onClose} style={{position:'fixed',inset:0,zIndex:100,background:'rgba(45,40,35,.25)',backdropFilter:'blur(6px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:'#FDFAF5',borderRadius:20,width:'100%',maxWidth:500,maxHeight:'88vh',overflow:'hidden',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(45,40,35,.18)',animation:'dialogIn .22s both'}}>
-        {/* Header */}
-        <div style={{padding:'18px 20px 12px',borderBottom:'1px solid #EDE8E0',flexShrink:0}}>
-          <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8,marginBottom:8}}>
-            <div style={{flex:1,minWidth:0}}>
-              <p style={{fontSize:10,color:'#A09688',marginBottom:4,letterSpacing:'.08em',textTransform:'uppercase'}}>{project.domainTitle}</p>
-              <div style={{display:'flex',alignItems:'center',gap:6}}>
-                <input value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))}
-                  style={{fontSize:16,fontWeight:500,color:'#2D2820',border:'none',background:'transparent',padding:0,width:'100%',outline:'none',fontFamily:'inherit'}} />
-                <MicButton onAppend={t=>setForm(f=>({...f,title:(f.title||'')+t}))} />
-              </div>
-            </div>
-            <button onClick={onClose} style={{background:'none',border:'none',fontSize:18,color:'#A09688',cursor:'pointer',flexShrink:0}}>×</button>
-          </div>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <div style={{flex:1,height:4,background:'rgba(180,172,160,.25)',borderRadius:4,overflow:'hidden'}}>
-              <div style={{height:'100%',width:`${pct}%`,background:'#2D4A3E',borderRadius:4,transition:'width .3s'}}></div>
-            </div>
-            <span style={{fontSize:11,color:'#A09688',flexShrink:0}}>{done}/{total}</span>
-          </div>
-        </div>
-
-        {/* Body */}
-        <div style={{overflowY:'auto',flex:1,padding:'14px 20px'}}>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:14}}>
-            {[
-              { label:'負責人', el:<select value={form.owner} onChange={e=>setForm(f=>({...f,owner:e.target.value}))} style={{fontSize:11,padding:'4px 6px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF',width:'100%'}}>
-                  <option value="apple">🍎 蘋果派</option><option value="pine">🌲 松果</option><option value="us">🤝 我們</option>
-                </select> },
-              { label:'截止日期', el:<input type="date" value={form.dueDate} onChange={e=>setForm(f=>({...f,dueDate:e.target.value}))} style={{fontSize:11,padding:'4px 6px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF',width:'100%'}} /> },
-              { label:'狀態', el:<select value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))} style={{fontSize:11,padding:'4px 6px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF',width:'100%'}}>
-                  <option value="todo">待開始</option><option value="doing">進行中</option><option value="done">已完成</option>
-                </select> },
-            ].map(({label,el})=>(
-              <div key={label}><p style={{fontSize:9,color:'#A09688',marginBottom:3}}>{label}</p>{el}</div>
-            ))}
-          </div>
-          <div style={{display:'flex',gap:6,marginBottom:14}}>
-            <textarea value={form.desc} onChange={e=>setForm(f=>({...f,desc:e.target.value}))} rows={2} placeholder="專案備註…"
-              style={{fontSize:12,width:'100%',borderRadius:8,border:'1px solid #E0D9CF',padding:'8px 10px',resize:'none',fontFamily:'inherit',lineHeight:1.6}} />
-            <MicButton onAppend={t=>setForm(f=>({...f,desc:(f.desc||'')+t}))} />
-          </div>
-
-          {/* Actions */}
-          <p style={{fontSize:10,color:'#A09688',marginBottom:7,letterSpacing:'.08em',textTransform:'uppercase'}}>行動項目 · {total} 個</p>
-          <div style={{display:'flex',gap:6,marginBottom:8}}>
-            <input value={newAction} onChange={e=>setNewAction(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addAction()} placeholder="新增行動項目…"
-              style={{flex:1,fontSize:12,padding:'6px 10px',borderRadius:8,border:'1px solid #E0D9CF'}} />
-            <MicButton onAppend={t=>setNewAction(v=>v+t)} />
-            <button onClick={addAction} style={{background:'#2D4A3E',color:'#F8F6F1',border:'none',borderRadius:8,padding:'6px 12px',fontSize:12,cursor:'pointer'}}>＋</button>
-          </div>
-          <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:8}}>
-            {todoActs.map(a=>(
-              <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'rgba(255,255,255,.6)',borderRadius:8,border:'1px solid rgba(180,172,160,.25)'}}>
-                <button onClick={()=>toggleAction(a.id)} style={{width:15,height:15,borderRadius:3,border:'1.5px solid #C8C0B4',background:'none',cursor:'pointer',flexShrink:0}}></button>
-                <span style={{flex:1,fontSize:12,color:'#2D2820'}}>{a.recurType==='recurring'&&'🔁 '}{a.title}</span>
-                {a.subitems&&a.subitems.length>0 &&
-                  <span style={{fontSize:9,color:'#A09688',flexShrink:0}}>☑ {a.subitems.filter(s=>s.done).length}/{a.subitems.length}</span>}
-                <button onClick={()=>setEditingAction(a)} title="編輯 / 設定循環" style={{background:'none',border:'none',fontSize:12,color:'#C8C0B4',cursor:'pointer'}}>⚙</button>
-                <button onClick={()=>deleteAction(a.id)} style={{background:'none',border:'none',fontSize:12,color:'#C8C0B4',cursor:'pointer'}}>×</button>
-              </div>
-            ))}
-          </div>
-          {doneActs.length>0&&(
-            <div style={{display:'flex',flexDirection:'column',gap:4}}>
-              <p style={{fontSize:10,color:'#C0B8AE',marginBottom:2}}>已完成 ({doneActs.length})</p>
-              {doneActs.map(a=>(
-                <div key={a.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'rgba(45,74,62,.04)',borderRadius:8}}>
-                  <button onClick={()=>toggleAction(a.id)} style={{width:15,height:15,borderRadius:3,border:'none',background:'#2D4A3E',cursor:'pointer',flexShrink:0,color:'#F8F6F1',fontSize:9,display:'flex',alignItems:'center',justifyContent:'center'}}>✓</button>
-                  <span style={{flex:1,fontSize:12,color:'#A09688',textDecoration:'line-through'}}>{a.recurType==='recurring'&&'🔁 '}{a.title}</span>
-                  {a.subitems&&a.subitems.length>0 &&
-                    <span style={{fontSize:9,color:'#A09688',flexShrink:0}}>☑ {a.subitems.filter(s=>s.done).length}/{a.subitems.length}</span>}
-                  {a.recurType==='recurring' && a.recurNextDate &&
-                    <span style={{fontSize:9,color:'#5BA37B',flexShrink:0}}>下次 {a.recurNextDate.slice(5).replace('-','/')}</span>}
-                  <button onClick={()=>setEditingAction(a)} title="編輯 / 設定循環" style={{background:'none',border:'none',fontSize:12,color:'#C8C0B4',cursor:'pointer'}}>⚙</button>
-                  <button onClick={()=>deleteAction(a.id)} style={{background:'none',border:'none',fontSize:12,color:'#C8C0B4',cursor:'pointer'}}>×</button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div style={{padding:'10px 20px',borderTop:'1px solid #EDE8E0',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
-          <button onClick={deleteProject} style={{background:'none',border:'none',fontSize:12,color:'#C0887A',cursor:'pointer',fontFamily:'inherit'}}>刪除專案</button>
-          <div style={{display:'flex',gap:7}}>
-            <button onClick={onClose} style={{background:'none',border:'1.5px solid #E0D9CF',borderRadius:9,padding:'6px 12px',fontSize:12,color:'#7D7468',cursor:'pointer'}}>取消</button>
-            <button onClick={save} style={{background:'#2D4A3E',color:'#F8F6F1',border:'none',borderRadius:9,padding:'6px 14px',fontSize:12,cursor:'pointer'}}>儲存</button>
-          </div>
-        </div>
-      </div>
-      {editingAction && <ActionEditModal action={editingAction} onSave={saveAction} onClose={()=>setEditingAction(null)} />}
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════════════════
-   PROJECT CARD
-════════════════════════════════════════════════════════ */
-function ProjectCard({ project, demData, onOpen, onStatusChange, dragging, onDragStart, onDragEnd }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const { total, done, next } = getProjectStats(project.id, demData);
-  const pct = total > 0 ? Math.round(done / total * 100) : 0;
-  const ownerEmoji = project.owner==='apple'?'🍎':project.owner==='pine'?'🌲':'🤝';
-
-  return (
-    <div
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      onClick={() => { if (!menuOpen) onOpen(); }}
-      style={{
-        background: dragging ? 'rgba(255,255,255,.6)' : 'rgba(255,255,255,.88)',
-        border: '1.5px solid rgba(180,172,160,.35)',
-        borderRadius: 12,
-        padding: '12px 13px',
-        cursor: 'grab',
-        transition: 'box-shadow .15s, transform .15s',
-        boxShadow: dragging ? '0 10px 28px rgba(45,40,35,.20)' : '0 1px 4px rgba(45,40,35,.06)',
-        transform: dragging ? 'scale(1.03) rotate(.8deg)' : 'scale(1)',
-        opacity: dragging ? .88 : 1,
-        userSelect: 'none',
-        position: 'relative',
-      }}
-    >
-      {/* Domain label */}
-      <p style={{fontSize:9,color:'#A09688',marginBottom:4,letterSpacing:'.06em',textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-        {project.domainTitle}
-      </p>
-
-      {/* Title + menu */}
-      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:4,marginBottom:8}}>
-        <p style={{fontSize:13,fontWeight:500,color:'#2D2820',lineHeight:1.4,flex:1}}>{project.title}</p>
-        <button onClick={e=>{e.stopPropagation();setMenuOpen(m=>!m);}}
-          style={{background:'none',border:'none',fontSize:15,color:'#C0B8AE',cursor:'pointer',padding:'0 2px',lineHeight:1,flexShrink:0}}>⋮</button>
-      </div>
-
-      {/* Context menu */}
-      {menuOpen && (
-        <div onClick={e=>e.stopPropagation()}
-          style={{position:'absolute',top:36,right:8,background:'#FDFAF5',border:'1px solid #E0D9CF',borderRadius:10,padding:'5px 0',zIndex:20,boxShadow:'0 4px 16px rgba(45,40,35,.14)',minWidth:110}}>
-          {['todo','doing','done'].map(s=>(
-            <button key={s} onClick={()=>{onStatusChange(s);setMenuOpen(false);}}
-              style={{display:'block',width:'100%',background:'none',border:'none',textAlign:'left',padding:'6px 13px',fontSize:11,color:project.status===s?'#2D4A3E':'#3D3830',cursor:'pointer',fontFamily:'inherit',fontWeight:project.status===s?600:400}}>
-              {project.status===s?'✓ ':''}{s==='todo'?'待開始':s==='doing'?'進行中':'已完成'}
-            </button>
-          ))}
-          <div style={{height:1,background:'#EDE8E0',margin:'3px 0'}}></div>
-          <button onClick={()=>{onOpen();setMenuOpen(false);}}
-            style={{display:'block',width:'100%',background:'none',border:'none',textAlign:'left',padding:'6px 13px',fontSize:11,color:'#3D3830',cursor:'pointer',fontFamily:'inherit'}}>
-            ✎ 編輯
-          </button>
-        </div>
-      )}
-
-      {/* Owner + due date */}
-      <div style={{display:'flex',alignItems:'center',gap:7,marginBottom:total>0?8:0,flexWrap:'wrap'}}>
-        <span style={{fontSize:13}}>{ownerEmoji}</span>
-        {project.dueDate&&<span style={{fontSize:10,color:'#A09688'}}>📅 {project.dueDate.slice(5).replace('-','/')}</span>}
-      </div>
-
-      {/* Progress bar */}
-      {total > 0 && (
-        <div style={{marginBottom:next?7:0}}>
-          <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
-            <span style={{fontSize:9,color:'#A09688'}}>進度</span>
-            <span style={{fontSize:9,color:'#A09688'}}>{done}/{total}</span>
-          </div>
-          <div style={{height:3,background:'rgba(180,172,160,.22)',borderRadius:3,overflow:'hidden'}}>
-            <div style={{height:'100%',width:`${pct}%`,background:'#2D4A3E',borderRadius:3}}></div>
-          </div>
-        </div>
-      )}
-
-      {/* Next action */}
-      {next && (
-        <p style={{fontSize:10,color:'#7D7468',marginTop:7,padding:'4px 8px',background:'rgba(180,172,160,.1)',borderRadius:6,lineHeight:1.4}}>
-          <span style={{color:'#A09688'}}>下一步 · </span>{next.title}
-        </p>
-      )}
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════════════════════
-   PROJECTS PAGE — Kanban
-════════════════════════════════════════════════════════ */
-/* ════════════════════════════════════════════════════════
-   ACTION HELPERS (for Kanban)
-════════════════════════════════════════════════════════ */
-function flattenActions(demData) {
-  const r = [];
-  (demData.projects||[]).forEach(proj => {
-    (demData.actions[proj.id]||[]).forEach(a => {
-      r.push({
-        ...a,
-        domainId:     proj.id,
-        domainTitle:  proj.title,
-        projectId:    proj.id,
-        projectTitle: proj.title,
-        projectOwner: proj.owner||'us',
-      });
-    });
-  });
-  return r;
-}
-
-
-function updateActionInDem(setDemData, projectId, actionId, updates) {
-  setDemData(d => ({
-    ...d,
-    actions: {
-      ...d.actions,
-      [projectId]: (d.actions[projectId]||[]).map(a =>
-        a.id === actionId ? {...a,...updates,_updatedAt:Date.now()} : a
-      ),
-    },
-  }));
-}
-
-/* ── Action Card ── */
-function ActionCard({ action, onOpen, dragging, onDragStart, onDragEnd }) {
-  const ownerEmoji = action.assignee==='apple'?'🍎':action.assignee==='pine'?'🌲':'🤝';
-  const subitems = action.subitems||[];
-  const subDone = subitems.filter(s=>s.done).length;
-  return (
-    <div
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      onClick={onOpen}
-      style={{
-        background: dragging?'rgba(255,255,255,.6)':'rgba(255,255,255,.88)',
-        border:'1.5px solid rgba(180,172,160,.32)',
-        borderRadius:10,
-        padding:'10px 12px',
-        cursor:'grab',
-        transition:'box-shadow .15s, transform .15s',
-        boxShadow: dragging?'0 8px 22px rgba(45,40,35,.18)':'0 1px 4px rgba(45,40,35,.05)',
-        transform: dragging?'scale(1.03) rotate(.6deg)':'scale(1)',
-        opacity: dragging?.88:1,
-        userSelect:'none',
-      }}
-    >
-      {/* Breadcrumb */}
-      <p style={{fontSize:9,color:'#A09688',marginBottom:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',letterSpacing:'.04em'}}>
-        {action.domainTitle} › {action.projectTitle}
-      </p>
-      {/* Title */}
-      <p style={{fontSize:12,fontWeight:500,color:'#2D2820',lineHeight:1.4,marginBottom:7}}>{action.recurType==='recurring'&&'🔁 '}{action.title}</p>
-      {/* Meta */}
-      <div style={{display:'flex',alignItems:'center',gap:7,flexWrap:'wrap'}}>
-        <span style={{fontSize:12}}>{ownerEmoji}</span>
-        {action.dueDate&&<span style={{fontSize:9,color:'#A09688'}}>📅 {action.dueDate.slice(5).replace('-','/')}</span>}
-        {action.status==='done' && action.recurType==='recurring' && action.recurNextDate &&
-          <span style={{fontSize:9,color:'#5BA37B'}}>🔁 下次 {action.recurNextDate.slice(5).replace('-','/')}</span>}
-        {subitems.length>0 &&
-          <span style={{fontSize:9,color: subDone===subitems.length?'#5BA37B':'#A09688'}}>☑ {subDone}/{subitems.length}</span>}
-      </div>
-    </div>
-  );
-}
-
-/* ── Action Edit Modal ── */
-function ActionEditModal({ action, onSave, onClose }) {
-  // Subitems: if the action already has some, edit those (up to 4). If it has none yet,
-  // start with 4 blank rows ready to fill in — but blanks are never forced/saved.
-  const initSubitems = () => {
-    const existing = (action.subitems||[]).filter(s=>s && typeof s.title==='string').slice(0,4);
-    if (existing.length===0) return [0,1,2,3].map(()=>makeSubitem(''));
-    return existing;
-  };
-  const [form, setForm] = useState({
-    title:     action.title,
-    desc:      action.desc||'',
-    assignee:  action.assignee||'us',
-    dueDate:   action.dueDate||'',
-    status:    action.status||'todo',
-    recurType: action.recurType||'once',
-    recurFreq: action.recurFreq||'weekly',
-    recurCustomDays: action.recurCustomDays||7,
-    subitems:  initSubitems(),
-  });
-  function save() {
-    if (!form.title.trim()) return;
-    const cleanSubitems = form.subitems
-      .filter(s=>s && s.title && s.title.trim())
-      .slice(0,4)
-      .map(s=>({ ...s, title:s.title.trim() }));
-    onSave({ ...action, ...form, title:form.title.trim(), subitems:cleanSubitems });
-    onClose();
-  }
-  function updateSubitem(id, updates) {
-    setForm(f => ({ ...f, subitems: f.subitems.map(s => s.id===id ? {...s,...updates} : s) }));
-  }
-  function removeSubitem(id) {
-    setForm(f => ({ ...f, subitems: f.subitems.filter(s => s.id!==id) }));
-  }
-  function addSubitem() {
-    setForm(f => f.subitems.length>=4 ? f : { ...f, subitems: [...f.subitems, makeSubitem('')] });
-  }
-  const isRecurring = form.recurType==='recurring';
-  return (
-    <div onClick={onClose} style={{position:'fixed',inset:0,zIndex:100,background:'rgba(45,40,35,.25)',backdropFilter:'blur(6px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-      <div onClick={e=>e.stopPropagation()} style={{background:'#FDFAF5',borderRadius:18,padding:'22px',width:'100%',maxWidth:380,animation:'dialogIn .2s both'}}>
-        <h3 style={{fontSize:14,fontWeight:500,color:'#2D2820',marginBottom:14}}>編輯行動</h3>
-        <div style={{display:'flex',flexDirection:'column',gap:9}}>
-          <div className="voice-field-row">
-            <input value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} onKeyDown={e=>e.key==='Enter'&&save()} placeholder="行動名稱" />
-            <MicButton onAppend={t=>setForm(f=>({...f,title:(f.title||'')+t}))} />
-          </div>
-          <div className="voice-field-row">
-            <textarea value={form.desc} onChange={e=>setForm(f=>({...f,desc:e.target.value}))} placeholder="備註（選填）" rows={2} style={{fontSize:12,padding:'8px 10px',borderRadius:8,border:'1px solid #E0D9CF',resize:'none',fontFamily:'inherit',lineHeight:1.6}} />
-            <MicButton onAppend={t=>setForm(f=>({...f,desc:(f.desc||'')+t}))} />
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:9}}>
-            <select value={form.assignee} onChange={e=>setForm(f=>({...f,assignee:e.target.value}))} style={{fontSize:12,padding:'6px 8px',borderRadius:8,border:'1px solid #E0D9CF',background:'#FFF'}}>
-              <option value="apple">🍎 蘋果派</option>
-              <option value="pine">🌲 松果</option>
-              <option value="us">🤝 我們</option>
-            </select>
-            <input type="date" value={form.dueDate} onChange={e=>setForm(f=>({...f,dueDate:e.target.value}))} style={{fontSize:12,padding:'6px 8px',borderRadius:8,border:'1px solid #E0D9CF',background:'#FFF'}} />
-          </div>
-          <select value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value}))} style={{fontSize:12,padding:'6px 8px',borderRadius:8,border:'1px solid #E0D9CF',background:'#FFF'}}>
-            <option value="todo">待開始</option>
-            <option value="doing">進行中</option>
-            <option value="done">已完成</option>
-          </select>
-
-          {/* Subitems checklist (max 4, user-defined) */}
-          <div style={{borderTop:'1px solid #EDE8E0',paddingTop:9,marginTop:2}}>
-            <p style={{fontSize:10,color:'#A09688',marginBottom:6,letterSpacing:'.06em',textTransform:'uppercase'}}>細項（最多 4 個，選填）</p>
-            <div style={{display:'flex',flexDirection:'column',gap:6}}>
-              {form.subitems.map(s=>(
-                <div key={s.id} style={{display:'flex',alignItems:'center',gap:7}}>
-                  <button type="button" onClick={()=>updateSubitem(s.id,{done:!s.done})}
-                    title={s.done?'標示未完成':'標示完成'}
-                    style={{width:17,height:17,borderRadius:4,flexShrink:0,cursor:'pointer',
-                      border: s.done? 'none' : '1.5px solid #C8C0B4',
-                      background: s.done? '#5BA37B' : '#FFF',
-                      color:'#F8F6F1',fontSize:10,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                    {s.done?'✓':''}
-                  </button>
-                  <input value={s.title} onChange={e=>updateSubitem(s.id,{title:e.target.value})}
-                    placeholder="細項名稱…"
-                    style={{flex:1,fontSize:12,padding:'5px 8px',borderRadius:7,border:'1px solid #E0D9CF',
-                      background: s.done? 'rgba(91,163,123,.08)' : '#FFF',
-                      color: s.done? '#5BA37B' : '#2D2820',
-                      textDecoration: s.done? 'line-through' : 'none'}} />
-                  <button type="button" onClick={()=>removeSubitem(s.id)} title="刪除細項"
-                    style={{background:'none',border:'none',fontSize:13,color:'#C8C0B4',cursor:'pointer',flexShrink:0}}>×</button>
-                </div>
-              ))}
-              {form.subitems.length<4 && (
-                <button type="button" onClick={addSubitem}
-                  style={{alignSelf:'flex-start',background:'none',border:'1.5px dashed #D8D0C4',borderRadius:7,padding:'4px 10px',fontSize:11,color:'#A09688',cursor:'pointer',marginTop:2}}>
-                  ＋ 新增細項
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Recurring action settings */}
-          <div style={{borderTop:'1px solid #EDE8E0',paddingTop:9,marginTop:2}}>
-            <p style={{fontSize:10,color:'#A09688',marginBottom:6,letterSpacing:'.06em',textTransform:'uppercase'}}>類型</p>
-            <div style={{display:'flex',gap:7,marginBottom:isRecurring?9:0}}>
-              <button type="button" onClick={()=>setForm(f=>({...f,recurType:'once'}))}
-                style={{flex:1,fontSize:12,padding:'6px 8px',borderRadius:8,cursor:'pointer',
-                  border:`1.5px solid ${!isRecurring?'#2D4A3E':'#E0D9CF'}`,
-                  background:!isRecurring?'rgba(45,74,62,.08)':'#FFF',
-                  color:!isRecurring?'#2D4A3E':'#7D7468',fontWeight:!isRecurring?500:400}}>
-                單次
-              </button>
-              <button type="button" onClick={()=>setForm(f=>({...f,recurType:'recurring'}))}
-                style={{flex:1,fontSize:12,padding:'6px 8px',borderRadius:8,cursor:'pointer',
-                  border:`1.5px solid ${isRecurring?'#2D4A3E':'#E0D9CF'}`,
-                  background:isRecurring?'rgba(45,74,62,.08)':'#FFF',
-                  color:isRecurring?'#2D4A3E':'#7D7468',fontWeight:isRecurring?500:400}}>
-                🔁 循環
-              </button>
-            </div>
-            {isRecurring && (
-              <div style={{display:'flex',flexDirection:'column',gap:7}}>
-                <select value={form.recurFreq} onChange={e=>setForm(f=>({...f,recurFreq:e.target.value}))}
-                  style={{fontSize:12,padding:'6px 8px',borderRadius:8,border:'1px solid #E0D9CF',background:'#FFF'}}>
-                  <option value="weekly">每週</option>
-                  <option value="monthly">每月</option>
-                  <option value="yearly">每年</option>
-                  <option value="custom">自訂週期</option>
-                </select>
-                {form.recurFreq==='custom' && (
-                  <div style={{display:'flex',alignItems:'center',gap:7}}>
-                    <input type="number" min="1" value={form.recurCustomDays}
-                      onChange={e=>setForm(f=>({...f,recurCustomDays:parseInt(e.target.value,10)||1}))}
-                      style={{fontSize:12,padding:'6px 8px',borderRadius:8,border:'1px solid #E0D9CF',width:70}} />
-                    <span style={{fontSize:11,color:'#A09688'}}>天重複一次</span>
-                  </div>
-                )}
-                <p style={{fontSize:10,color:'#A09688',lineHeight:1.5}}>完成後會保留完成紀錄，並自動建立下一次的行動</p>
-              </div>
-            )}
-          </div>
-        </div>
-        <div style={{display:'flex',gap:8,marginTop:14,justifyContent:'flex-end'}}>
-          <button onClick={onClose} style={{background:'none',border:'1.5px solid #E0D9CF',borderRadius:8,padding:'6px 12px',fontSize:12,color:'#7D7468',cursor:'pointer'}}>取消</button>
-          <button onClick={save} style={{background:'#2D4A3E',color:'#F8F6F1',border:'none',borderRadius:8,padding:'6px 14px',fontSize:12,cursor:'pointer'}}>儲存</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── Projects Page (Action Kanban) ── */
-function ProjectsPage({ demData, setDemData }) {
-  const [filterDomain,  setFilterDomain]  = useState('all');
-  const [filterOwner,   setFilterOwner]   = useState('all');
-  const [draggingId,    setDraggingId]    = useState(null);
-  const [dragOver,      setDragOver]      = useState(null);
-  const [editAction,    setEditAction]    = useState(null);
-  const [isMobile,      setIsMobile]      = useState(typeof window!=='undefined'&&window.innerWidth<640);
-  const [showAdd,       setShowAdd]       = useState(false);
-  const [newTitle,      setNewTitle]      = useState('');
-  const [newProjectId,  setNewProjectId]  = useState('');
-
-  useEffect(()=>{
-    const fn=()=>setIsMobile(window.innerWidth<640);
-    window.addEventListener('resize',fn);
-    return()=>window.removeEventListener('resize',fn);
-  },[]);
-
-  const allActions = useMemo(()=>flattenActions(demData),[demData]);
-  const filtered   = allActions.filter(a=>{
-    if (filterDomain!=='all'&&a.domainId!==filterDomain) return false;
-    if (filterOwner !=='all'&&(a.assignee||'us')!==filterOwner) return false;
-    return true;
-  });
-
-  const cols = {
-    todo:  filtered.filter(a=>(a.status||'todo')==='todo'),
-    doing: filtered.filter(a=>(a.status||'todo')==='doing'),
-    done:  filtered.filter(a=>(a.status||'todo')==='done'),
-  };
-
-  function changeStatus(action, status) {
-    const becomingDone = status==='done' && action.status!=='done';
-    const leavingDone   = status!=='done' && action.status==='done';
-    if (becomingDone) {
-      updateActionInDem(setDemData, action.projectId, action.id, markActionDone(action));
-    } else if (leavingDone) {
-      updateActionInDem(setDemData, action.projectId, action.id, markActionUndone(action));
-    } else {
-      updateActionInDem(setDemData, action.projectId, action.id, { status });
-    }
-  }
-
-  function handleDrop(status) {
-    if (!draggingId) return;
-    const act = allActions.find(a=>a.id===draggingId);
-    if (act) changeStatus(act, status);
-    setDraggingId(null); setDragOver(null);
-  }
-
-  function saveEditedAction(updated) {
-    const becomingDone = updated.status==='done' && editAction && editAction.status!=='done';
-    const leavingDone   = updated.status!=='done' && editAction && editAction.status==='done';
-    const base = {
-      title: updated.title, desc: updated.desc,
-      assignee: updated.assignee, dueDate: updated.dueDate,
-      recurType: updated.recurType||'once',
-      recurFreq: updated.recurFreq||'weekly',
-      recurCustomDays: updated.recurCustomDays||7,
-    };
-    if (becomingDone) {
-      updateActionInDem(setDemData, updated.projectId, updated.id, { ...base, ...markActionDone(updated) });
-    } else if (leavingDone) {
-      updateActionInDem(setDemData, updated.projectId, updated.id, { ...base, ...markActionUndone(updated) });
-    } else {
-      updateActionInDem(setDemData, updated.projectId, updated.id, { ...base, status: updated.status });
-    }
-  }
-
-  function deleteAction(action) {
-    if (!window.confirm('確定刪除這個行動嗎？')) return;
-    markDeletedForSync(action.id);
-    setDemData(d=>({
-      ...d,
-      actions:{...d.actions,[action.projectId]:(d.actions[action.projectId]||[]).filter(a=>a.id!==action.id)},
-    }));
-    setEditAction(null);
-  }
-
-  function addAction() {
-    if (!newTitle.trim()||!newProjectId) return;
-    const a = makeAction(newTitle.trim());
-    setDemData(d=>({...d,actions:{...d.actions,[newProjectId]:[...(d.actions[newProjectId]||[]),a]}}));
-    setNewTitle(''); setShowAdd(false);
-  }
-
-  // Flat project list for add dropdown
-  const allProjects = useMemo(()=>flattenProjects(demData),[demData]);
-
-  const colDef = [
-    { key:'todo',  label:'待開始', accent:'#A09688', borderTop:'2px solid rgba(160,150,136,.5)' },
-    { key:'doing', label:'進行中', accent:'#C07040', borderTop:'2px solid rgba(232,149,109,.6)' },
-    { key:'done',  label:'已完成', accent:'#2D4A3E', borderTop:'2px solid rgba(45,74,62,.5)'    },
-  ];
-
-  const FilterBar = ()=>(
-    <div style={{padding:'11px 14px',borderBottom:'1px solid #EDE8E0',flexShrink:0,display:'flex',alignItems:'center',gap:7,flexWrap:'wrap'}}>
-      <span style={{fontFamily:"'Noto Serif TC',serif",fontSize:15,fontWeight:400,color:'#2D2820',marginRight:4}}>行動看板</span>
-      <select value={filterDomain} onChange={e=>setFilterDomain(e.target.value)} style={{fontSize:11,padding:'3px 7px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF',cursor:'pointer'}}>
-        <option value="all">所有專案</option>
-        {(demData.projects||[]).map(p=><option key={p.id} value={p.id}>{p.title}</option>)}
-      </select>
-      <select value={filterOwner} onChange={e=>setFilterOwner(e.target.value)} style={{fontSize:11,padding:'3px 7px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF',cursor:'pointer'}}>
-        <option value="all">所有人</option>
-        <option value="apple">🍎 蘋果派</option>
-        <option value="pine">🌲 松果</option>
-        <option value="us">🤝 我們</option>
-      </select>
-      <span style={{marginLeft:'auto',fontSize:10,color:'#A09688'}}>{filtered.length} 個行動</span>
-      <button onClick={()=>setShowAdd(s=>!s)} style={{background:'#2D4A3E',color:'#F8F6F1',border:'none',borderRadius:7,padding:'4px 10px',fontSize:11,cursor:'pointer'}}>＋ 新增</button>
-    </div>
-  );
-
-  const AddRow = ()=> showAdd ? (
-    <div style={{padding:'9px 14px',borderBottom:'1px solid #EDE8E0',background:'rgba(45,74,62,.04)',flexShrink:0,display:'flex',gap:7,alignItems:'center',flexWrap:'wrap'}}>
-      <input value={newTitle} onChange={e=>setNewTitle(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addAction()} placeholder="行動名稱…" autoFocus
-        style={{fontSize:12,padding:'5px 9px',borderRadius:7,border:'1px solid #E0D9CF',flex:1,minWidth:100,fontFamily:'inherit'}} />
-      <MicButton onAppend={t=>setNewTitle(v=>v+t)} />
-      <select value={newProjectId} onChange={e=>setNewProjectId(e.target.value)} style={{fontSize:11,padding:'5px 7px',borderRadius:7,border:'1px solid #E0D9CF',background:'#FFF'}}>
-        <option value="">選擇專案…</option>
-        {allProjects.map(p=><option key={p.id} value={p.id}>{p.title}</option>)}
-      </select>
-      <button onClick={addAction} style={{background:'#2D4A3E',color:'#F8F6F1',border:'none',borderRadius:7,padding:'5px 11px',fontSize:11,cursor:'pointer'}}>建立</button>
-      <button onClick={()=>setShowAdd(false)} style={{background:'none',border:'1px solid #E0D9CF',borderRadius:7,padding:'5px 8px',fontSize:11,color:'#A09688',cursor:'pointer'}}>取消</button>
-    </div>
-  ) : null;
-
-  /* Mobile: list by status */
-  if (isMobile) {
-    return (
-      <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
-        <FilterBar />
-        <AddRow />
-        <div className="page-scroll" style={{flex:1}}>
-          <div style={{padding:'10px 12px 40px',display:'flex',flexDirection:'column',gap:5}}>
-            {colDef.map(col=>(
-              <div key={col.key}>
-                <p style={{fontSize:10,color:col.accent,fontWeight:500,letterSpacing:'.06em',textTransform:'uppercase',padding:'6px 0 4px'}}>{col.label} · {cols[col.key].length}</p>
-                {cols[col.key].map(a=>(
-                  <div key={a.id} style={{marginBottom:5}}>
-                    <ActionCard action={a} onOpen={()=>setEditAction(a)} dragging={false} onDragStart={()=>{}} onDragEnd={()=>{}} />
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-        {editAction&&<ActionEditModal action={editAction} onSave={a=>{saveEditedAction(a);setEditAction(null);}} onClose={()=>setEditAction(null)} />}
-      </div>
-    );
-  }
-
-  /* Desktop: 3-column Kanban */
-  return (
-    <div style={{display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
-      <FilterBar />
-      <AddRow />
-      <div style={{flex:1,display:'flex',overflow:'hidden'}}>
-        {colDef.map((col,ci)=>(
-          <div key={col.key}
-            onDragOver={e=>{e.preventDefault();setDragOver(col.key);}}
-            onDragLeave={()=>setDragOver(null)}
-            onDrop={()=>handleDrop(col.key)}
-            style={{
-              flex:1,display:'flex',flexDirection:'column',minWidth:0,
-              borderRight:ci<2?'1px solid #EDE8E0':'none',
-              background:dragOver===col.key?'rgba(45,74,62,.04)':'transparent',
-              transition:'background .15s',
-            }}
-          >
-            <div style={{padding:'10px 12px 8px',display:'flex',alignItems:'center',gap:5,flexShrink:0,borderBottom:col.borderTop}}>
-              <span style={{fontSize:11,fontWeight:500,color:col.accent,letterSpacing:'.04em'}}>{col.label}</span>
-              <span style={{fontSize:10,color:'#C0B8AE',background:'rgba(180,172,160,.16)',borderRadius:8,padding:'1px 6px'}}>{cols[col.key].length}</span>
-            </div>
-            <div style={{flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch',padding:'8px 9px 28px',display:'flex',flexDirection:'column',gap:6}}>
-              {cols[col.key].map(a=>(
-                <ActionCard key={a.id} action={a} onOpen={()=>setEditAction(a)}
-                  dragging={draggingId===a.id}
-                  onDragStart={()=>setDraggingId(a.id)}
-                  onDragEnd={()=>{setDraggingId(null);setDragOver(null);}} />
-              ))}
-              {cols[col.key].length===0&&(
-                <div style={{textAlign:'center',padding:'28px 0',color:'#C0B8AE',fontSize:11}}>
-                  {col.key==='todo'?'暫無待開始行動':col.key==='doing'?'暫無進行中行動':'還沒有完成的行動'}
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-      {editAction&&(
-        <div onClick={()=>setEditAction(null)} style={{position:'fixed',inset:0,zIndex:100,background:'rgba(45,40,35,.22)',backdropFilter:'blur(6px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:'#FDFAF5',borderRadius:18,padding:'22px',width:'100%',maxWidth:380,animation:'dialogIn .2s both'}}>
-            <h3 style={{fontSize:14,fontWeight:500,color:'#2D2820',marginBottom:4}}>{editAction.title}</h3>
-            <p style={{fontSize:10,color:'#A09688',marginBottom:14}}>{editAction.domainTitle} › {editAction.projectTitle}</p>
-            <ActionEditModal action={editAction}
-              onSave={a=>{saveEditedAction(a);setEditAction(null);}}
-              onClose={()=>setEditAction(null)} />
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 
 /* ════════════════════════════════════════════════════════
    MEMORY WALL (Completed)
@@ -2398,7 +1679,7 @@ function MemoriesPage({ demData }) {
   const projectStats = useMemo(() => (demData.projects||[]).map(proj => {
     const acts    = demData.actions[proj.id]||[];
     const actDone = acts.filter(a=>a.status==='done').length;
-    const done    = acts.length > 0 ? actDone===acts.length : proj.status==='done';
+    const done    = proj.status==='done' || (acts.length > 0 && actDone===acts.length);
     return { ...proj, acts, actDone, actTotal:acts.length, completed:done };
   }), [demData]);
 
@@ -3053,7 +2334,6 @@ function App() {
         {page==='home'     && <HomePage     demData={state.demData} calEvents={state.calEvents} todayStatus={state.todayStatus} setTodayStatus={setTodayStatus} setPage={setPage} onJumpProject={onJumpProject} />}
         {page==='dream'    && <div style={{flex:1,display:'flex',overflow:'hidden'}}><DreamExpansionMap data={state.demData} setData={setDemData} support={state.support} onSupportChange={handleSupportChange} jumpTo={dreamJump} /></div>}
         {page==='calendar' && <CalendarPage calEvents={state.calEvents} setCalEvents={setCalEvents} />}
-        {page==='projects' && <ProjectsPage demData={state.demData} setDemData={setDemData} />}
         {page==='memories' && <MemoriesPage demData={state.demData} />}
         {page==='review'   && <ReviewPage  demData={state.demData} calEvents={state.calEvents} />}
         {loadErr&&page!=='dream'&&<div style={{position:'fixed',bottom:70,left:'50%',transform:'translateX(-50%)',background:'rgba(192,136,122,.9)',color:'#FFF',fontSize:12,padding:'6px 14px',borderRadius:20,pointerEvents:'none',zIndex:30}}>{loadErr}</div>}
