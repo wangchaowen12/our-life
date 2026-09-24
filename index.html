@@ -678,7 +678,7 @@ function EditDialog({ node, layer, onSave, onDelete, onClose, support, onSupport
 /* ════════════════════════════════════════════════════════
    DEM — OrbitNode
 ════════════════════════════════════════════════════════ */
-function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reorderable, onOwnerChange, dragIndex, onDragStartNode, onDragOverNode, onDropNode, isDragOver, isDragging, kind, onToggleDone, onToggleFeature }) {
+function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reorderable, onOwnerChange, dragIndex, onDragStartNode, onDragOverNode, onDropNode, isDragOver, isDragging, kind, onToggleDone, onToggleFeature, onToggleAchieved }) {
   const [hovered, setHovered] = useState(false);
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false);
   const pickerRef = useRef(null);
