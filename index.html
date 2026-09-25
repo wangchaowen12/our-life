@@ -194,9 +194,11 @@ function makeAction(title) {
    assignee is 'apple' or 'pine' only (no shared "us" option at this level).
    monthlyFocus: whether this subitem is starred as this month's focus (drives the Home page's 本月執行專案). */
 function makeSubitem(title='') {
-  return { id:uid(), title, done:false, assignee:'apple', monthlyFocus:false };
+  return { id:uid(), title, done:false, assignee:'apple', monthlyFocus:false,
+    recurType:'once', recurFreq:'weekly', recurCustomDays:7, recurNextDate:null };
 }
-/* ── Recurring Action helpers ──
+/* ── Recurring helpers (used by both Actions (legacy) and Subitems — the DEM's editor now
+   only exposes this at the Subitem layer, but the same field shape/logic works for either) ──
    recurType: 'once' | 'recurring'
    recurFreq: 'weekly' | 'monthly' | 'yearly' | 'custom' (only used when recurring)
    recurCustomDays: number of days, only used when recurFreq==='custom' */
@@ -222,10 +224,23 @@ function markActionDone(action) {
 function markActionUndone(action) {
   return { ...action, status:'todo', completedAt:null, recurNextDate:null, _updatedAt:Date.now() };
 }
-/* Sweeps every action across every project: any recurring action that's been "done" past its
-   recurNextDate automatically reopens as todo (same card, same id — no duplicates). Keeps the
-   last completion date under lastCompletedAt so history isn't lost. Returns the SAME demData
-   reference untouched if nothing needs to roll over, so it never triggers pointless re-renders/saves. */
+/* Same two helpers, for a Subitem petal (uses the boolean `done` field instead of `status`) */
+function markSubitemDone(subitem) {
+  return {
+    ...subitem,
+    done: true,
+    completedAt: todayKey(),
+    recurNextDate: subitem.recurType==='recurring' ? nextRecurDate(todayKey(), subitem.recurFreq, subitem.recurCustomDays) : null,
+  };
+}
+function markSubitemUndone(subitem) {
+  return { ...subitem, done:false, completedAt:null, recurNextDate:null };
+}
+/* Sweeps every action (and every subitem within it) across every project: anything recurring
+   that's been marked done past its recurNextDate automatically reopens (same card/petal, same
+   id — no duplicates). Keeps the last completion date under lastCompletedAt so history isn't
+   lost. Returns the SAME demData reference untouched if nothing needs to roll over, so it never
+   triggers pointless re-renders/saves. */
 function rolloverDueActions(demData) {
   if (!demData || !demData.actions) return demData;
   const today = todayKey();
@@ -234,11 +249,22 @@ function rolloverDueActions(demData) {
   Object.keys(demData.actions).forEach(pid => {
     const list = demData.actions[pid] || [];
     const newList = list.map(a => {
-      if (a && a.status==='done' && a.recurType==='recurring' && a.recurNextDate && a.recurNextDate <= today) {
+      let next = a;
+      if (next && next.status==='done' && next.recurType==='recurring' && next.recurNextDate && next.recurNextDate <= today) {
         changed = true;
-        return { ...a, status:'todo', lastCompletedAt:a.completedAt||a.lastCompletedAt||null, completedAt:null, recurNextDate:null, _updatedAt:Date.now() };
+        next = { ...next, status:'todo', lastCompletedAt:next.completedAt||next.lastCompletedAt||null, completedAt:null, recurNextDate:null, _updatedAt:Date.now() };
       }
-      return a;
+      if (next && Array.isArray(next.subitems) && next.subitems.some(s=>s && s.done && s.recurType==='recurring' && s.recurNextDate && s.recurNextDate<=today)) {
+        changed = true;
+        next = {
+          ...next,
+          subitems: next.subitems.map(s => (s && s.done && s.recurType==='recurring' && s.recurNextDate && s.recurNextDate<=today)
+            ? { ...s, done:false, lastCompletedAt:s.completedAt||s.lastCompletedAt||null, completedAt:null }
+            : s),
+          _updatedAt: Date.now(),
+        };
+      }
+      return next;
     });
     actions[pid] = newList;
   });
@@ -531,7 +557,10 @@ function EditDialog({ node, layer, onSave, onDelete, onClose, support, onSupport
   const [updateText, setUpdateText] = useState('');
   const [neededText, setNeededText] = useState('');
   const [receivedText, setReceivedText] = useState('');
-  const isSubitem = layer==='subitems'; // Subitem petals (depth-2 leaf nodes): just a title + delete, nothing else applies.
+  const isSubitem = layer==='subitems'; // Subitem petals (depth-2 leaf nodes): title, owner, done — and recurring, below.
+  const [recurType, setRecurType]             = useState(node.recurType || 'once');
+  const [recurFreq, setRecurFreq]             = useState(node.recurFreq || 'weekly');
+  const [recurCustomDays, setRecurCustomDays] = useState(node.recurCustomDays || 7);
   const [tab, setTab] = useState('basic'); // basic | image | updates | support
   const titleRef = useRef();
   const sup = support[node.id] || { needed:[], received:[] };
@@ -540,7 +569,11 @@ function EditDialog({ node, layer, onSave, onDelete, onClose, support, onSupport
 
   function handleSave() {
     if (!title.trim()) return;
-    if (isSubitem) { onSave({ ...node, title:title.trim() }); onClose(); return; }
+    if (isSubitem) {
+      onSave({ ...node, title:title.trim(), recurType, recurFreq, recurCustomDays: parseInt(recurCustomDays,10)||7 });
+      onClose();
+      return;
+    }
     onSave({ ...node, title:title.trim(), desc:desc.trim(), image, updates, owner, assignee: node.assignee!==undefined ? owner : undefined });
     onClose();
   }
@@ -608,6 +641,31 @@ function EditDialog({ node, layer, onSave, onDelete, onClose, support, onSupport
                 <div>
                   <label style={{display:'block',fontSize:10,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:5}}>描述</label>
                   <VoiceField as="textarea" value={desc} onChange={setDesc} placeholder="這個節點的意義…" rows={3} />
+                </div>
+              )}
+              {isSubitem && (
+                <div>
+                  <label style={{display:'block',fontSize:10,color:'#A09688',letterSpacing:'.1em',textTransform:'uppercase',marginBottom:5}}>循環提醒</label>
+                  <label style={{display:'flex',alignItems:'center',gap:7,fontSize:12,color:'#3D3830',cursor:'pointer',marginBottom:recurType==='recurring'?9:0}}>
+                    <input type="checkbox" checked={recurType==='recurring'} onChange={e=>setRecurType(e.target.checked?'recurring':'once')} style={{width:15,height:15,accentColor:'#2D4A3E'}} />
+                    設為循環細項（標示完成後會依週期自動重新開啟，並自動列入本月執行專案）
+                  </label>
+                  {recurType==='recurring' && (
+                    <div style={{display:'flex',gap:8,alignItems:'center',paddingLeft:22}}>
+                      <select value={recurFreq} onChange={e=>setRecurFreq(e.target.value)} style={{fontSize:12,padding:'7px 10px',borderRadius:9,border:'1.5px solid #E0D9CF',background:'#FFF',fontFamily:'inherit'}}>
+                        <option value="weekly">每週</option>
+                        <option value="monthly">每月</option>
+                        <option value="yearly">每年</option>
+                        <option value="custom">自訂天數</option>
+                      </select>
+                      {recurFreq==='custom' && (
+                        <div style={{display:'flex',alignItems:'center',gap:5}}>
+                          <input type="number" min="1" value={recurCustomDays} onChange={e=>setRecurCustomDays(e.target.value)} style={{width:56,fontSize:12,padding:'7px 8px',borderRadius:9,border:'1.5px solid #E0D9CF'}} />
+                          <span style={{fontSize:11,color:'#A09688'}}>天一次</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1069,14 +1127,15 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo, st
   },[setData]);
 
 
-  // ── Toggle a subitem petal's done state directly from the map (Subitem/petal layer) ──
+  // ── Toggle a subitem petal's done state directly from the map (Subitem/petal layer).
+  //    Uses markSubitemDone/markSubitemUndone so a recurring subitem's rollover date gets set/cleared. ──
   const toggleActionSubitem = useCallback((parentProjectId, actionId, subitemId, done) => {
     setData(d => ({
       ...d,
       actions: {
         ...d.actions,
         [parentProjectId]: (d.actions[parentProjectId]||[]).map(a => a.id===actionId
-          ? { ...a, subitems:(a.subitems||[]).map(s=>s.id===subitemId?{...s,done}:s), _updatedAt:Date.now() }
+          ? { ...a, subitems:(a.subitems||[]).map(s=>s.id===subitemId?(done?markSubitemDone(s):markSubitemUndone(s)):s), _updatedAt:Date.now() }
           : a),
       },
     }));
@@ -1203,13 +1262,13 @@ function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage, on
     return r;
   },[demData]);
 
-  // 本月執行專案：已勾選「本月執行重點」的細項，依完成狀態分兩組
+  // 本月執行專案：已勾選「本月執行重點」或設為循環的細項，依完成狀態分兩組
   const monthlyItems = useMemo(()=>{
     const items = [];
     (demData.projects||[]).forEach(proj=>{
       (demData.actions[proj.id]||[]).forEach(a=>{
         (a.subitems||[]).forEach(s=>{
-          if (s && s.monthlyFocus && s.title && s.title.trim()) {
+          if (s && s.title && s.title.trim() && (s.monthlyFocus || s.recurType==='recurring')) {
             items.push({
               id:'sub_'+s.id, kind:'subitem', title:s.title.trim(), done:!!s.done,
               projectTitle:proj.title, actionTitle:a.title,
@@ -1323,7 +1382,7 @@ function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage, on
           </div>
           {monthlyItems.length===0 && (
             <p style={{fontSize:10,color:'#C0B8AE',marginTop:8,lineHeight:1.6}}>
-              到「夢想」展開一個行動、進入細項層，點 ☆ 標記本月執行重點，這裡就會出現提醒。
+              到「夢想」展開行動、進入細項層，點 ☆ 標記本月執行重點，或把細項設為循環，這裡就會出現提醒。
             </p>
           )}
         </div>
