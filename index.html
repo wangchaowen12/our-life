@@ -891,8 +891,7 @@ function OrbitNode({ node, pos, delay, onZoomIn, onEdit, isPlaceholder, reordera
 /* ════════════════════════════════════════════════════════
    DEM — DreamExpansionMap
 ════════════════════════════════════════════════════════ */
-function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo }) {
-  const [stack, setStack]          = useState([{id:'dream',title:data.dream.title,depth:0}]);
+function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo, stack, setStack }) {
   const [phase, setPhase]          = useState('idle');
   const [pendingStack, setPending] = useState(null);
   const [animating, setAnimating]  = useState(false);
@@ -2076,6 +2075,32 @@ function App() {
     return { ...saved, demData: migrateData(saved.demData), calEvents: migrateCalEvents(saved.calEvents) };
   });
 
+  // ── Dream Map navigation stack, lifted up from DreamExpansionMap so browser/device
+  //    "back" can step through it (see history sync effect below) instead of leaving the site. ──
+  const [demStack, setDemStack] = useState(() => [{id:'dream', title: state.demData.dream.title, depth:0}]);
+
+  // ── Sync in-app navigation (page + Dream Map depth) with the browser history so the
+  //    device/browser "back" button steps back through the app one level at a time,
+  //    instead of immediately leaving the website. ──
+  const suppressNavPushRef = useRef(false);
+  const navHistoryReadyRef = useRef(false);
+  useEffect(() => {
+    history.replaceState({ __nav:true, page, demStack }, '');
+    function onPopState(e) {
+      if (!e.state || !e.state.__nav) return; // not one of ours — let the browser leave the site as normal
+      suppressNavPushRef.current = true;
+      setPage(e.state.page || 'home');
+      setDemStack(e.state.demStack || [{id:'dream', title: state.demData.dream.title, depth:0}]);
+    }
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  },[]);
+  useEffect(() => {
+    if (!navHistoryReadyRef.current) { navHistoryReadyRef.current = true; return; } // skip the initial mount
+    if (suppressNavPushRef.current) { suppressNavPushRef.current = false; return; } // this change came FROM popstate — don't re-push
+    history.pushState({ __nav:true, page, demStack }, '');
+  },[page, demStack]);
+
   const [loading, setLoading]   = useState(IS_CONFIGURED);
   const [loadErr, setLoadErr]   = useState('');
   const [syncing, setSyncing]   = useState(false);
@@ -2340,7 +2365,7 @@ function App() {
       {/* Page content */}
       <div className="page-content">
         {page==='home'     && <HomePage     demData={state.demData} calEvents={state.calEvents} todayStatus={state.todayStatus} setTodayStatus={setTodayStatus} setPage={setPage} onJumpProject={onJumpProject} />}
-        {page==='dream'    && <div style={{flex:1,display:'flex',overflow:'hidden'}}><DreamExpansionMap data={state.demData} setData={setDemData} support={state.support} onSupportChange={handleSupportChange} jumpTo={dreamJump} /></div>}
+        {page==='dream'    && <div style={{flex:1,display:'flex',overflow:'hidden'}}><DreamExpansionMap data={state.demData} setData={setDemData} support={state.support} onSupportChange={handleSupportChange} jumpTo={dreamJump} stack={demStack} setStack={setDemStack} /></div>}
         {page==='calendar' && <CalendarPage calEvents={state.calEvents} setCalEvents={setCalEvents} />}
         {page==='memories' && <MemoriesPage demData={state.demData} />}
         {page==='review'   && <ReviewPage  demData={state.demData} calEvents={state.calEvents} />}
