@@ -141,6 +141,7 @@ const STATUS_COLOR = {
 const PAGES = [
   { key:'home',      label:'首頁',  icon:'🏠' },
   { key:'dream',     label:'夢想',  icon:'✦'  },
+  { key:'focus',     label:'焦點',  icon:'🎯' },
   { key:'calendar',  label:'月曆',  icon:'📅' },
   { key:'memories',  label:'回憶',  icon:'📸' },
   { key:'review',    label:'回顧',  icon:'📖' },
@@ -192,10 +193,14 @@ function makeAction(title) {
 /* ── Action subitems (checklist under an Action, max 4) ──
    Each subitem: { id, title, done, assignee, monthlyFocus }. Free-form, user-created; an Action may have 0–4.
    assignee is 'apple' or 'pine' only (no shared "us" option at this level).
-   monthlyFocus: whether this subitem is starred as this month's focus (drives the Home page's 本月執行專案). */
+   monthlyFocus: whether this subitem is starred as this month's focus (drives the Home page's 本月執行專案).
+   monthlyOrder: drag-reorder priority within the 焦點清單/本月執行專案 lists (lower = higher priority).
+   scheduledDate: date string once this subitem has been added to the calendar from the 焦點清單, else null.
+   archivedAt: date string once a completed subitem's ☆ was auto-cleared after month rollover (see rolloverDueActions below) — the subitem, its done state and completedAt are untouched, only used so 回顧 can note it was archived, not deleted. */
 function makeSubitem(title='') {
   return { id:uid(), title, done:false, assignee:'apple', monthlyFocus:false,
-    recurType:'once', recurFreq:'weekly', recurCustomDays:7, recurNextDate:null };
+    recurType:'once', recurFreq:'weekly', recurCustomDays:7, recurNextDate:null,
+    monthlyOrder:0, scheduledDate:null, archivedAt:null };
 }
 /* ── Recurring helpers (used by both Actions (legacy) and Subitems — the DEM's editor now
    only exposes this at the Subitem layer, but the same field shape/logic works for either) ──
@@ -236,14 +241,21 @@ function markSubitemDone(subitem) {
 function markSubitemUndone(subitem) {
   return { ...subitem, done:false, completedAt:null, recurNextDate:null };
 }
-/* Sweeps every action (and every subitem within it) across every project: anything recurring
-   that's been marked done past its recurNextDate automatically reopens (same card/petal, same
-   id — no duplicates). Keeps the last completion date under lastCompletedAt so history isn't
-   lost. Returns the SAME demData reference untouched if nothing needs to roll over, so it never
-   triggers pointless re-renders/saves. */
+/* Sweeps every action (and every subitem within it) across every project — two kinds of automatic
+   housekeeping, both non-destructive (nothing is ever deleted, just un-flagged):
+   1) Recurring subitems/actions past their recurNextDate automatically reopen (same card/petal,
+      same id — no duplicates). The last completion date is kept under lastCompletedAt.
+   2) A non-recurring subitem that's done AND still starred (monthlyFocus) gets its star cleared
+      once the calendar rolls into the month AFTER it was completed — this is what keeps 本月執行
+      專案/焦點清單's "已完成" column from accumulating forever. The subitem itself, its done state,
+      and completedAt are untouched, so it keeps showing up in 回顧 (Review) permanently; archivedAt
+      just records when the auto-archive happened.
+   Returns the SAME demData reference untouched if nothing needs to change, so it never triggers
+   pointless re-renders/saves. */
 function rolloverDueActions(demData) {
   if (!demData || !demData.actions) return demData;
   const today = todayKey();
+  const thisMonth = today.slice(0,7);
   let changed = false;
   const actions = {};
   Object.keys(demData.actions).forEach(pid => {
@@ -254,15 +266,21 @@ function rolloverDueActions(demData) {
         changed = true;
         next = { ...next, status:'todo', lastCompletedAt:next.completedAt||next.lastCompletedAt||null, completedAt:null, recurNextDate:null, _updatedAt:Date.now() };
       }
-      if (next && Array.isArray(next.subitems) && next.subitems.some(s=>s && s.done && s.recurType==='recurring' && s.recurNextDate && s.recurNextDate<=today)) {
-        changed = true;
-        next = {
-          ...next,
-          subitems: next.subitems.map(s => (s && s.done && s.recurType==='recurring' && s.recurNextDate && s.recurNextDate<=today)
-            ? { ...s, done:false, lastCompletedAt:s.completedAt||s.lastCompletedAt||null, completedAt:null }
-            : s),
-          _updatedAt: Date.now(),
-        };
+      if (next && Array.isArray(next.subitems) && next.subitems.length) {
+        let subChanged = false;
+        const subitems = next.subitems.map(s => {
+          if (!s) return s;
+          if (s.done && s.recurType==='recurring' && s.recurNextDate && s.recurNextDate<=today) {
+            subChanged = true;
+            return { ...s, done:false, lastCompletedAt:s.completedAt||s.lastCompletedAt||null, completedAt:null };
+          }
+          if (s.done && s.monthlyFocus && s.recurType!=='recurring' && s.completedAt && s.completedAt.slice(0,7) < thisMonth) {
+            subChanged = true;
+            return { ...s, monthlyFocus:false, archivedAt: today };
+          }
+          return s;
+        });
+        if (subChanged) { changed = true; next = { ...next, subitems, _updatedAt: Date.now() }; }
       }
       return next;
     });
@@ -955,15 +973,20 @@ function DreamExpansionMap({ data, setData, support, onSupportChange, jumpTo, st
   const [animating, setAnimating]  = useState(false);
   const [editTarget, setEditTarget] = useState(null);
 
-  // Jump to a specific project when requested from Home page
+  // Jump to a specific project (and optionally a specific action inside it) when requested from Home/Focus page
   useEffect(()=>{
     if (!jumpTo?.projectId) return;
     const proj = (data.projects||[]).find(p=>p.id===jumpTo.projectId);
     if (!proj) return;
-    setStack([
+    const newStack = [
       {id:'dream', title:data.dream.title, depth:0},
       {id:proj.id, title:proj.title,       depth:1},
-    ]);
+    ];
+    if (jumpTo.actionId) {
+      const act = (data.actions[proj.id]||[]).find(a=>a.id===jumpTo.actionId);
+      if (act) newStack.push({id:act.id, title:act.title, depth:2, parentId:proj.id});
+    }
+    setStack(newStack);
   },[jumpTo]);
 
   const current    = stack[stack.length-1];
@@ -1262,7 +1285,7 @@ function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage, on
     return r;
   },[demData]);
 
-  // 本月執行專案：已勾選「本月執行重點」或設為循環的細項，依完成狀態分兩組
+  // 本月執行專案：已勾選「本月執行重點」或設為循環的細項，依優先序排序後取前幾項，依完成狀態分兩組
   const monthlyItems = useMemo(()=>{
     const items = [];
     (demData.projects||[]).forEach(proj=>{
@@ -1271,13 +1294,16 @@ function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage, on
           if (s && s.title && s.title.trim() && (s.monthlyFocus || s.recurType==='recurring')) {
             items.push({
               id:'sub_'+s.id, kind:'subitem', title:s.title.trim(), done:!!s.done,
+              projectId:proj.id, actionId:a.id,
               projectTitle:proj.title, actionTitle:a.title,
               ownerEmoji: s.assignee==='pine'?'🌲':'🍎',
+              order: s.monthlyOrder||0,
             });
           }
         });
       });
     });
+    items.sort((a,b)=>a.order-b.order);
     return items;
   },[demData]);
   const monthlyTodo = monthlyItems.filter(i=>!i.done);
@@ -1344,20 +1370,23 @@ function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage, on
 
         {/* ── 本月執行專案 ── */}
         <div style={{marginBottom:18}}>
-          <SectionHeader emoji="🟨" label="本月執行專案" action={<button onClick={()=>setPage('dream')} style={{fontSize:10,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>夢想 →</button>} />
+          <SectionHeader emoji="🟨" label="本月執行專案" action={<button onClick={()=>setPage('focus')} style={{fontSize:10,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer'}}>焦點清單 →</button>} />
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
             {[
               {label:'未完成', items:monthlyTodo, color:'#C07040'},
               {label:'已完成', items:monthlyDone, color:'#2D4A3E'},
             ].map(col=>(
               <div key={col.label} className="card" style={{padding:'11px 12px',background:'rgba(255,255,255,.85)'}}>
-                <p style={{fontSize:11,fontWeight:500,color:col.color,marginBottom:7}}>{col.label} · {col.items.length}</p>
+                <p style={{fontSize:11,fontWeight:500,color:col.color,marginBottom:col.label==='已完成'?2:7}}>{col.label} · {col.items.length}</p>
+                {col.label==='已完成' && (
+                  <p style={{fontSize:9,color:'#C0B8AE',marginBottom:7,lineHeight:1.5}}>非循環項目跨月後會自動歸檔到「回顧」，不會消失</p>
+                )}
                 {col.items.length===0 ? (
                   <p style={{fontSize:10,color:'#C0B8AE',lineHeight:1.6}}>尚無{col.label}項目</p>
                 ) : (
                   <div style={{display:'flex',flexDirection:'column',gap:5}}>
                     {col.items.slice(0,6).map(it=>(
-                      <button key={it.id} onClick={()=>setPage('dream')}
+                      <button key={it.id} onClick={()=>onJumpProject(it.projectId,it.projectTitle,it.actionId)}
                         style={{display:'flex',alignItems:'flex-start',gap:5,background:'none',border:'none',cursor:'pointer',
                           textAlign:'left',padding:0,fontFamily:'inherit'}}>
                         <span style={{fontSize:10,flexShrink:0,marginTop:1}}>{it.kind==='action'?'📌':'▫️'}</span>
@@ -1373,7 +1402,7 @@ function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage, on
                       </button>
                     ))}
                     {col.items.length>6 && (
-                      <p style={{fontSize:9,color:'#C0B8AE'}}>還有 {col.items.length-6} 項…</p>
+                      <button onClick={()=>setPage('focus')} style={{fontSize:9,color:'#2D4A3E',background:'none',border:'none',cursor:'pointer',padding:0,textAlign:'left',fontFamily:'inherit'}}>還有 {col.items.length-6} 項，查看全部 →</button>
                     )}
                   </div>
                 )}
@@ -1505,6 +1534,178 @@ function HomePage({ demData, calEvents, todayStatus, setTodayStatus, setPage, on
 /* ════════════════════════════════════════════════════════
    CALENDAR PAGE
 ════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════
+   FOCUS LIST (焦點清單) — the full, uncapped list of every subitem that's
+   either ☆ 本月執行重點 or set to recurring, across every project/action.
+   Supports drag-reorder (priority) and one-tap "加入行事曆".
+════════════════════════════════════════════════════════ */
+function FocusPage({ demData, setData, calEvents, setCalEvents, onJumpProject }) {
+  const [tab, setTab] = useState('todo'); // 'todo' | 'done'
+  const [dragIdx, setDragIdx] = useState(null);
+  const [dragOverIdx, setDragOverIdx] = useState(null);
+  const [datePickFor, setDatePickFor] = useState(null); // subitem id currently choosing a date for
+  const [pickDate, setPickDate] = useState(todayKey());
+
+  const allItems = useMemo(() => {
+    const items = [];
+    (demData.projects||[]).forEach(proj=>{
+      (demData.actions[proj.id]||[]).forEach(a=>{
+        (a.subitems||[]).forEach(s=>{
+          if (s && s.title && s.title.trim() && (s.monthlyFocus || s.recurType==='recurring')) {
+            items.push({
+              projectId:proj.id, actionId:a.id, subitemId:s.id,
+              title:s.title.trim(), done:!!s.done,
+              projectTitle:proj.title, actionTitle:a.title,
+              owner:s.assignee||'apple', ownerEmoji:s.assignee==='pine'?'🌲':'🍎',
+              recurring:s.recurType==='recurring', starred:!!s.monthlyFocus,
+              scheduledDate:s.scheduledDate||null, order:s.monthlyOrder||0,
+            });
+          }
+        });
+      });
+    });
+    return items;
+  },[demData]);
+
+  const todoItems = useMemo(()=>allItems.filter(i=>!i.done).sort((a,b)=>a.order-b.order),[allItems]);
+  const doneItems = useMemo(()=>allItems.filter(i=>i.done).sort((a,b)=>a.order-b.order),[allItems]);
+  const list = tab==='todo' ? todoItems : doneItems;
+
+  function updateSubitem(projectId, actionId, subitemId, patch) {
+    setData(d => ({
+      ...d,
+      actions: {
+        ...d.actions,
+        [projectId]: (d.actions[projectId]||[]).map(a => a.id===actionId
+          ? { ...a, subitems:(a.subitems||[]).map(s=>s.id===subitemId?{...s,...patch}:s), _updatedAt:Date.now() }
+          : a),
+      },
+    }));
+  }
+
+  function toggleDone(item) {
+    const a = (demData.actions[item.projectId]||[]).find(x=>x.id===item.actionId);
+    const s = a && (a.subitems||[]).find(x=>x.id===item.subitemId);
+    if (!s) return;
+    updateSubitem(item.projectId, item.actionId, item.subitemId, item.done ? markSubitemUndone(s) : markSubitemDone(s));
+  }
+
+  function handleDrop(targetIdx) {
+    if (dragIdx===null || targetIdx===null || dragIdx===targetIdx) { setDragIdx(null); setDragOverIdx(null); return; }
+    const reordered = [...list];
+    const [moved] = reordered.splice(dragIdx,1);
+    reordered.splice(targetIdx,0,moved);
+    setData(d => {
+      let next = d;
+      reordered.forEach((it,idx)=>{
+        next = {
+          ...next,
+          actions: {
+            ...next.actions,
+            [it.projectId]: (next.actions[it.projectId]||[]).map(a => a.id===it.actionId
+              ? { ...a, subitems:(a.subitems||[]).map(s=>s.id===it.subitemId?{...s,monthlyOrder:idx}:s), _updatedAt:Date.now() }
+              : a),
+          },
+        };
+      });
+      return next;
+    });
+    setDragIdx(null); setDragOverIdx(null);
+  }
+
+  function openDatePicker(item) {
+    setDatePickFor(item.subitemId);
+    setPickDate(item.scheduledDate || todayKey());
+  }
+  function confirmAddToCalendar(item) {
+    setCalEvents(prev => [...prev, {
+      id:uid(), title:item.title, startDate:pickDate, endDate:pickDate, owner:item.owner, stress:'normal',
+      tags:['焦點清單'], note:`來自：${item.projectTitle} › ${item.actionTitle}`, _updatedAt:Date.now(),
+    }]);
+    updateSubitem(item.projectId, item.actionId, item.subitemId, { scheduledDate: pickDate });
+    setDatePickFor(null);
+  }
+
+  return (
+    <div style={{flex:1,overflowY:'auto',padding:'18px 18px 90px'}}>
+      <h2 style={{fontSize:16,fontWeight:500,color:'#2D2820',marginBottom:3}}>🎯 焦點清單</h2>
+      <p style={{fontSize:11,color:'#A09688',marginBottom:14}}>本月執行重點與循環細項的完整清單 · 拖曳 ⠿ 調整優先序</p>
+
+      <div style={{display:'flex',gap:6,marginBottom:14}}>
+        {[{k:'todo',label:'未完成',items:todoItems},{k:'done',label:'已完成',items:doneItems}].map(t=>(
+          <button key={t.k} onClick={()=>setTab(t.k)}
+            style={{flex:1,padding:'9px 0',borderRadius:11,border:'1.5px solid '+(tab===t.k?'#2D4A3E':'#E0D9CF'),
+              background: tab===t.k?'#2D4A3E':'rgba(255,255,255,.7)', color: tab===t.k?'#FFF':'#3D3830',
+              fontSize:12,fontWeight:500,cursor:'pointer',fontFamily:'inherit'}}>
+            {t.label} · {t.items.length}
+          </button>
+        ))}
+      </div>
+
+      {tab==='done' && (
+        <p style={{fontSize:10,color:'#C0B8AE',marginBottom:12,lineHeight:1.5}}>非循環項目跨月後會自動從這裡移除，但完整記錄永遠保留在「回顧」頁，不會消失。</p>
+      )}
+
+      {list.length===0 ? (
+        <p style={{fontSize:12,color:'#C0B8AE',textAlign:'center',padding:'30px 0',lineHeight:1.7}}>
+          {allItems.length===0
+            ? '到「夢想」展開行動、進入細項層，點 ☆ 標記本月執行重點，或把細項設為循環，這裡就會出現完整清單。'
+            : `目前沒有${tab==='todo'?'未完成':'已完成'}的項目。`}
+        </p>
+      ) : (
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          {list.map((item,idx)=>(
+            <div key={item.subitemId}
+              draggable onDragStart={()=>setDragIdx(idx)}
+              onDragOver={e=>{e.preventDefault();setDragOverIdx(idx);}}
+              onDrop={e=>{e.preventDefault();handleDrop(idx);}}
+              onDragEnd={()=>{setDragIdx(null);setDragOverIdx(null);}}
+              className="card"
+              style={{padding:'11px 12px',background:'rgba(255,255,255,.9)',display:'flex',gap:9,alignItems:'flex-start',
+                opacity:dragIdx===idx?.4:1, outline: dragOverIdx===idx&&dragIdx!==idx?'2px dashed #2D4A3E':'none', outlineOffset:-2}}>
+
+              <span style={{fontSize:13,color:'#C0B8AE',cursor:'grab',flexShrink:0,marginTop:2,userSelect:'none'}}>⠿</span>
+
+              <button onClick={()=>toggleDone(item)} title={item.done?'標示未完成':'標示完成'}
+                style={{width:20,height:20,borderRadius:'50%',flexShrink:0,marginTop:1,cursor:'pointer',
+                  border:'1.5px solid '+(item.done?'#5BA37B':'#D8D0C4'), background:item.done?'#5BA37B':'transparent',
+                  color:'#FFF',fontSize:11,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                {item.done?'✓':''}
+              </button>
+
+              <div style={{flex:1,minWidth:0}}>
+                <p style={{fontSize:13,color:item.done?'#A09688':'#2D2820',textDecoration:item.done?'line-through':'none',
+                  marginBottom:3,wordBreak:'break-word'}}>{item.title}</p>
+                <button onClick={()=>onJumpProject(item.projectId,item.projectTitle,item.actionId)}
+                  style={{fontSize:10,color:'#A09688',background:'none',border:'none',cursor:'pointer',padding:0,fontFamily:'inherit'}}>
+                  {item.ownerEmoji} {item.projectTitle} › {item.actionTitle}
+                  {item.recurring && <span style={{marginLeft:5}}>🔁</span>}
+                  {item.starred && <span style={{marginLeft:item.recurring?3:5}}>☆</span>}
+                </button>
+
+                {datePickFor===item.subitemId ? (
+                  <div style={{display:'flex',gap:6,alignItems:'center',marginTop:8}}>
+                    <input type="date" value={pickDate} onChange={e=>setPickDate(e.target.value)}
+                      style={{fontSize:11,padding:'6px 8px',borderRadius:8,border:'1.5px solid #E0D9CF'}} />
+                    <button onClick={()=>confirmAddToCalendar(item)} className="btn-primary" style={{fontSize:11,padding:'6px 10px'}}>加入行事曆</button>
+                    <button onClick={()=>setDatePickFor(null)} className="btn-ghost" style={{fontSize:11,padding:'6px 10px'}}>取消</button>
+                  </div>
+                ) : (
+                  <button onClick={()=>openDatePicker(item)}
+                    style={{fontSize:10,color: item.scheduledDate?'#2D4A3E':'#A09688',background: item.scheduledDate?'rgba(45,74,62,.1)':'none',
+                      border: item.scheduledDate?'none':'1px dashed #D8D0C4',borderRadius:20,padding:'3px 9px',marginTop:7,cursor:'pointer',fontFamily:'inherit'}}>
+                    📅 {item.scheduledDate ? `已排 ${item.scheduledDate}（點擊修改）` : '加入行事曆'}
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CalendarPage({ calEvents, setCalEvents }) {
   const now = new Date();
   const [year, setYear]   = useState(now.getFullYear());
@@ -2018,6 +2219,13 @@ function ReviewPage({ demData, calEvents }) {
     (demData.projects||[]).forEach(proj=>{
       (demData.actions[proj.id]||[]).forEach(a=>{
         if(a.status==='done') r.push({...a,domainTitle:proj.title,projectTitle:proj.title,type:'action',date:a.completedAt||''});
+        (a.subitems||[]).forEach(s=>{
+          if (s && s.done && s.completedAt) r.push({
+            id:'sub_'+s.id, title:s.title, type:'subitem', date:s.completedAt,
+            domainTitle:proj.title, projectTitle:proj.title, actionTitle:a.title,
+            owner:s.assignee, archived:!!s.archivedAt,
+          });
+        });
       });
     });
     calEvents.forEach(e=>r.push({...e,type:'event',date:eventStart(e)}));
@@ -2062,6 +2270,15 @@ function ReviewPage({ demData, calEvents }) {
                       <div className="card" style={{padding:'10px 13px'}}>
                         <p style={{fontSize:13,fontWeight:500,color:'#2D2820'}}>✓ {item.title}</p>
                         <p style={{fontSize:11,color:'#A09688',marginTop:2}}>{item.domainTitle} › {item.projectTitle}</p>
+                      </div>
+                    </div>
+                  );
+                  if(item.type==='subitem') return (
+                    <div key={item.id+i} style={{position:'relative'}}>
+                      <div style={{position:'absolute',left:-28,top:8,width:7,height:7,borderRadius:'50%',background:'#5BA37B',border:'2px solid #F8F6F1',boxShadow:'0 0 0 1px #5BA37B'}}></div>
+                      <div className="card" style={{padding:'10px 13px'}}>
+                        <p style={{fontSize:13,fontWeight:500,color:'#2D2820'}}>☑ {item.title}</p>
+                        <p style={{fontSize:11,color:'#A09688',marginTop:2}}>{item.domainTitle} › {item.actionTitle}</p>
                       </div>
                     </div>
                   );
@@ -2122,8 +2339,8 @@ function App() {
   const [page, setPage] = useState('home');
   const [dreamJump, setDreamJump] = useState(null);
 
-  function onJumpProject(projectId, projectTitle) {
-    setDreamJump({ projectId, projectTitle, ts: Date.now() });
+  function onJumpProject(projectId, projectTitle, actionId) {
+    setDreamJump({ projectId, projectTitle, actionId, ts: Date.now() });
     setPage('dream');
   }
 
@@ -2425,6 +2642,7 @@ function App() {
       <div className="page-content">
         {page==='home'     && <HomePage     demData={state.demData} calEvents={state.calEvents} todayStatus={state.todayStatus} setTodayStatus={setTodayStatus} setPage={setPage} onJumpProject={onJumpProject} />}
         {page==='dream'    && <div style={{flex:1,display:'flex',overflow:'hidden'}}><DreamExpansionMap data={state.demData} setData={setDemData} support={state.support} onSupportChange={handleSupportChange} jumpTo={dreamJump} stack={demStack} setStack={setDemStack} /></div>}
+        {page==='focus'    && <FocusPage    demData={state.demData} setData={setDemData} calEvents={state.calEvents} setCalEvents={setCalEvents} onJumpProject={onJumpProject} />}
         {page==='calendar' && <CalendarPage calEvents={state.calEvents} setCalEvents={setCalEvents} />}
         {page==='memories' && <MemoriesPage demData={state.demData} />}
         {page==='review'   && <ReviewPage  demData={state.demData} calEvents={state.calEvents} />}
