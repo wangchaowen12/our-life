@@ -274,9 +274,16 @@ function rolloverDueActions(demData) {
             subChanged = true;
             return { ...s, done:false, lastCompletedAt:s.completedAt||s.lastCompletedAt||null, completedAt:null };
           }
-          if (s.done && s.monthlyFocus && s.recurType!=='recurring' && s.completedAt && s.completedAt.slice(0,7) < thisMonth) {
-            subChanged = true;
-            return { ...s, monthlyFocus:false, archivedAt: today };
+          if (s.done && s.monthlyFocus && s.recurType!=='recurring') {
+            // A subitem completed before markSubitemDone started stamping completedAt (i.e. any
+            // legacy data from before this auto-archive feature existed) has no completedAt at
+            // all — treat that as "clearly from a past month" too, instead of silently never
+            // archiving, and backfill completedAt so it still shows up with a date in 回顧.
+            const completedMonth = s.completedAt ? s.completedAt.slice(0,7) : null;
+            if (!completedMonth || completedMonth < thisMonth) {
+              subChanged = true;
+              return { ...s, monthlyFocus:false, archivedAt: today, completedAt: s.completedAt || today };
+            }
           }
           return s;
         });
